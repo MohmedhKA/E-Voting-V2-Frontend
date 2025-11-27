@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@source "../index.html";
+@source "./**/*.{js,jsx,ts,tsx}";
+
+@theme {
+  --color-bg-dark: #0f172a;
+  --color-glass-bg: rgba(255, 255, 255, 0.05);
+  --color-glass-border: rgba(255, 255, 255, 0.1);
+  --color-neon-green: #10b981;
+  --color-india-saffron: #ff9933;
+  --color-india-green: #138808;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background-color: var(--color-bg-dark);
+  color: white;
+  font-family: 'Inter', sans-serif;
+}
+
+#root {
+  height: 100%;
+  background-image: url('/india-gate.jpg');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  position: relative;
+}
+
+#root {
+  height: 100%;
+  background-image: url('/india-gate.jpg');
+  background-size: 120%; /* Zoom out by making it bigger (paradoxically, this shows more of the image) */
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  backdrop-filter: blur(1px);
+  position: relative;
+}
+
+
+.glass-card {
+  background: var(--color-glass-bg);
+  border: 1px solid var(--color-glass-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 1rem;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
