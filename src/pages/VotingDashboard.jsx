@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, AlertCircle, Loader2, ArrowLeft, User } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, ArrowLeft, User, FileText, Loader } from 'lucide-react'; // Added FileText, Loader
 import apiClient from '../api/client';
 
 // Helper to get random color for candidates based on index
@@ -13,12 +13,18 @@ const getCandidateColor = (index) => {
 export default function VotingDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
+  
+  // --- CRITICAL: Keeping your original user/election retrieval ---
   const { user, election } = location.state || {};
 
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [isVoting, setIsVoting] = useState(false);
   const [voteSuccess, setVoteSuccess] = useState(false);
   const [error, setError] = useState('');
+
+  // --- NEW STATES FOR RECEIPT ---
+  const [receipt, setReceipt] = useState(null);
+  const [isPollingReceipt, setIsPollingReceipt] = useState(false);
 
   // Redirect if no session data (e.g. direct URL access)
   useEffect(() => {
@@ -27,12 +33,10 @@ export default function VotingDashboard() {
     }
   }, [user, election, navigate]);
 
-  // --- 🚀 DYNAMIC CANDIDATES MAPPING ---
-  // This handles the API format: candidates: ["KVT", "TTF", "DMK"]
+  // --- DYNAMIC CANDIDATES MAPPING (Your original logic) ---
   const candidates = election?.candidates
     ? (Array.isArray(election.candidates)
       ? election.candidates.map((c, index) => {
-          // Handle both simple strings and objects
           const candidateId = typeof c === 'string' ? c : c.id;
           const candidateName = typeof c === 'string' ? c : c.name;
           const candidateParty = typeof c === 'string' ? 'Independent' : (c.party || 'Independent');
@@ -42,53 +46,91 @@ export default function VotingDashboard() {
             name: candidateName,
             party: candidateParty,
             color: getCandidateColor(index),
-            // Generate consistent avatar based on ID
             image: `https://api.dicebear.com/7.x/avataaars/svg?seed=${candidateId}`
           };
         })
       : [])
     : [];
-  // -------------------------------------
+
+  // --- NEW HELPER: Poll for Receipt ---
+  const fetchReceipt = async (electionId, aadhaarHash) => {
+    setIsPollingReceipt(true);
+    let attempts = 0;
+    const maxAttempts = 15; // 30 seconds max
+    
+    const pollInterval = setInterval(async () => {
+        attempts++;
+        try {
+            const res = await apiClient.get(`/votes/receipt/${electionId}/${aadhaarHash}`);
+            
+            if (res.data.success) {
+                // ✅ SUCCESS: Stop polling immediately
+                clearInterval(pollInterval);
+                setReceipt(res.data.data);
+                setIsPollingReceipt(false);
+                console.log('✅ Receipt found!', res.data.data);
+            }
+        } catch (err) {
+            // 404 is expected while vote is processing, don't log as error
+            if (err.response?.status !== 404) {
+                console.error("Receipt fetch error", err);
+            }
+            
+            // Stop after max attempts
+            if (attempts >= maxAttempts) {
+                clearInterval(pollInterval);
+                setIsPollingReceipt(false);
+                setError('Receipt not available. Your vote was recorded but receipt generation timed out.');
+            }
+        }
+    }, 2000);
+  };
+
 
   const handleVote = async () => {
-    if (!selectedCandidate) return;
+    if (!selectedCandidate || isVoting) return;  // Prevent double-click
 
     setIsVoting(true);
     setError('');
 
     try {
-      // 1. Construct Vote Payload
+      // YOUR ORIGINAL PAYLOAD STRUCTURE (restored!)
       const payload = {
         electionId: election?.id,
         candidateId: selectedCandidate,
-        voterProof: user.voterProof,
-        hashedAadhaar: user.hashedAadhaar,
+        voterProof: user.voterProof,           // ← Your security proof
+        hashedAadhaar: user.hashedAadhaar,     // ← Your hashes
         hashedVoterID: user.hashedVoterID,
         hashedName: user.hashedName,
-        location: 'Chennai, India' // Ideally use navigator.geolocation
+        location: 'Chennai, India'
       };
 
       console.log('🗳️ Casting Vote:', payload);
 
-      // 2. Send to Backend
       const res = await apiClient.post('/votes', payload);
 
       if (res.data.success) {
         setVoteSuccess(true);
-        // Optional: Navigate back after delay
-        setTimeout(() => navigate('/'), 3000);
+        
+        // NEW: Trigger receipt polling with the returned hash
+        if (res.data.aadhaarHash) {
+            fetchReceipt(election.id, res.data.aadhaarHash);
+        }
       } else {
-        setError(res.data.error || 'Vote submission failed');
+        setVoteStatus('error');
+        setErrorMessage(res.data.message || 'Vote submission failed');
       }
     } catch (err) {
       console.error('Vote failed:', err);
-      setError(err.response?.data?.error || 'Network error occurred');
+      setVoteStatus('error');
+      setErrorMessage(err.response?.data?.message || 'Network error occurred');
     } finally {
       setIsVoting(false);
     }
   };
 
-  if (!user || !election) return null; // Prevent flash before redirect
+
+  if (!user || !election) return null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-orange-100 p-4 md:p-8 font-sans">
@@ -165,7 +207,6 @@ export default function VotingDashboard() {
               </motion.div>
             ))
           ) : (
-            // Fallback if no candidates found
             <div className="col-span-full text-center py-12 text-gray-500">
               <AlertCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
               <p>No candidates found for this election.</p>
@@ -173,7 +214,7 @@ export default function VotingDashboard() {
           )}
         </div>
 
-        {/* Bottom Section – behaves like footer, not floating */}
+        {/* Bottom Section */}
         {selectedCandidate && !voteSuccess && (
           <div className="bg-white border border-gray-200 rounded-2xl shadow-md px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="text-sm text-gray-600">
@@ -203,14 +244,14 @@ export default function VotingDashboard() {
           </div>
         )}
 
-        {/* Success Modal */}
+        {/* --- UPDATED SUCCESS MODAL WITH RECEIPT --- */}
         <AnimatePresence>
           {voteSuccess && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
               <motion.div
                 initial={{ scale: 0.5, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl"
+                className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl"
               >
                 <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
                   <CheckCircle className="w-10 h-10" />
@@ -219,6 +260,47 @@ export default function VotingDashboard() {
                 <p className="text-gray-600 mb-6">
                   Your vote has been securely recorded on the blockchain.
                 </p>
+
+                {/* --- RECEIPT CARD --- */}
+                <div className="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-200 text-left">
+                    <div className="flex items-center gap-2 mb-2">
+                        <FileText className="w-5 h-5 text-blue-600" />
+                        <h3 className="font-semibold text-gray-900">Blockchain Receipt</h3>
+                    </div>
+                    
+                    {isPollingReceipt ? (
+                        <div className="flex items-center gap-2 text-gray-500 py-2">
+                            <Loader className="w-4 h-4 animate-spin" />
+                            <span className="text-sm">Generating cryptographic proof...</span>
+                        </div>
+                    ) : receipt ? (
+                        <div className="space-y-3">
+                            <div>
+                                <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction ID</span>
+                                <p className="font-mono text-xs text-gray-800 break-all bg-white p-2 rounded border border-gray-200 mt-1">
+                                    {receipt.txId}
+                                </p>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-xs font-medium text-gray-500 uppercase">Timestamp</span>
+                                <span className="text-xs text-gray-800">
+                                    {new Date(receipt.timestamp).toLocaleTimeString()}
+                                </span>
+                            </div>
+                            <div className="mt-2 text-center">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    Verified on Ledger
+                                </span>
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="text-sm text-red-500 py-2">
+                            Receipt generation timed out. Please check your dashboard later.
+                        </p>
+                    )}
+                </div>
+                {/* ---------------------- */}
+
                 <button
                   onClick={() => navigate('/')}
                   className="w-full bg-gray-900 text-white py-3 rounded-xl font-bold hover:bg-gray-800 transition-colors"

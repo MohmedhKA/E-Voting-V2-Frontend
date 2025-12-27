@@ -3,6 +3,7 @@ import VoterLogin from './pages/VoterLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import VotingDashboard from './pages/VotingDashboard';
 import Simulator from './pages/Simulator';
+import VerifyVote from './pages/VerifyVote';
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
           <Route path="/vote" element={<VotingDashboard />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/simulate" element={<Simulator />} />
+          <Route path="/verify" element={<VerifyVote />} />
         </Routes>
       </div>
     </BrowserRouter>
