@@ -1,5 +1,5 @@
 // client/src/pages/VoterLogin.jsx
-// ✨ Merged Version: Old UI + New OTP Functionality
+// ✨ Updated Version: Added Session Creation + JWT Flow
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -26,13 +26,18 @@ export default function VoterLogin() {
   const [verifiedIdentity, setVerifiedIdentity] = useState(null);
   const [showIdentityModal, setShowIdentityModal] = useState(false);
 
-  // ✨ NEW: OTP State
+  // OTP State
   const [showOTPStep, setShowOTPStep] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [otpExpiry, setOtpExpiry] = useState(null);
   const [otpTimer, setOtpTimer] = useState(0);
   const [isResendingOTP, setIsResendingOTP] = useState(false);
   const [isSendingOTP, setIsSendingOTP] = useState(false);
+
+  // 🆕 NEW: Session State (for JWT authentication)
+  const [sessionID, setSessionID] = useState(null);
+  const [authToken, setAuthToken] = useState(null);
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
 
   // Election State
   const [elections, setElections] = useState([]);
@@ -55,6 +60,7 @@ export default function VoterLogin() {
   useEffect(() => {
     const fetchElections = async () => {
       try {
+        // 🆕 CHANGED: Use /public/active instead of /elections/active
         const res = await apiClient.get('/elections/active');
         if (res.data.success) {
           setElections(res.data.data);
@@ -71,7 +77,7 @@ export default function VoterLogin() {
   }, []);
 
   // ============================================
-  // 2. OTP Timer Countdown (NEW)
+  // 2. OTP Timer Countdown
   // ============================================
   useEffect(() => {
     if (!otpExpiry) return;
@@ -156,7 +162,7 @@ export default function VoterLogin() {
   };
 
   // ============================================
-  // 4. STEP 2: Send OTP (NEW - Called from Modal)
+  // 4. STEP 2: Send OTP
   // ============================================
   const handleSendOTP = async () => {
     setShowIdentityModal(false);
@@ -185,7 +191,7 @@ export default function VoterLogin() {
   };
 
   // ============================================
-  // 5. STEP 3: Verify OTP & Login (NEW - Replaces handleConfirmLogin)
+  // 5. STEP 3: Verify OTP & Create Session (FIXED!)
   // ============================================
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
@@ -200,51 +206,144 @@ export default function VoterLogin() {
     setIsLoading(true);
 
     try {
-      const res = await apiClient.post('/identity/verify-otp', {
+      // STEP 3A: Verify OTP first
+      const otpRes = await apiClient.post('/identity/verify-otp', {
         aadhaar,
         voterId,
         otp: otpString,
       });
 
-      if (res.data.success) {
-        // ✅ OTP Verified! Now check vote status and login
-        const proofs = await generateVoterProofs(aadhaar, voterId, verifiedIdentity.name);
-
-        const voterStatusRes = await apiClient.get(
-          `/voters/${selectedElection.id}/${proofs.voterProof}`
-        );
-
-        if (voterStatusRes.data.success && voterStatusRes.data.hasVoted) {
-          setError('You have already voted in this election.');
-          setIsLoading(false);
-          return;
-        }
-
-        const userObject = {
-          name: verifiedIdentity.name,
-          state: verifiedIdentity.state,
-          voterProof: proofs.voterProof,
-          hashedAadhaar: proofs.hashedAadhaar,
-          hashedVoterID: proofs.hashedVoterID,
-          hashedName: proofs.hashedName,
-        };
-
-        navigate('/vote', {
-          state: { user: userObject, election: selectedElection },
-        });
-      } else {
-        setError('Invalid OTP');
+      if (!otpRes.data.success) {
+        setError('Invalid OTP. Please try again.');
+        setIsLoading(false);
+        return;
       }
+
+      console.log('✅ OTP verified successfully');
+
+      // 🆕 STEP 3B: Create secure session and get JWT token
+      setIsCreatingSession(true);
+      console.log('🔐 Creating secure session...');
+
+      const sessionRes = await apiClient.post('/ec/create-session', {
+        aadhaar,
+        voterId,
+        fingerprintVerified: true,
+        otpVerified: true,
+        electionId: selectedElection.id
+      });
+
+      // 🔧 DEBUG: Log full response to see structure
+      console.log('📦 Full session response:', sessionRes.data);
+
+      if (!sessionRes.data.success) {
+        setError(sessionRes.data.message || 'Failed to create session. Please try again.');
+        setIsLoading(false);
+        setIsCreatingSession(false);
+        return;
+      }
+
+      // 🔧 FIX: Handle both response formats
+      // Format 1: { success, sessionID, authToken, expiresAt }
+      // Format 2: { success, data: { sessionID, authToken, expiresAt } }
+      const sessionData = sessionRes.data.data || sessionRes.data;
+      const newSessionID = sessionData.sessionID;
+      const newAuthToken = sessionData.authToken;
+      const expiresAt = sessionData.expiresAt;
+
+      // 🔧 VALIDATE: Make sure we got the required data
+      if (!newSessionID || !newAuthToken) {
+        console.error('❌ Session creation failed - missing required fields:', {
+          hasSessionID: !!newSessionID,
+          hasAuthToken: !!newAuthToken,
+          hasExpiresAt: !!expiresAt,
+          receivedData: sessionData
+        });
+        
+        setError('Backend error: Session data incomplete. Check backend logs.');
+        setIsLoading(false);
+        setIsCreatingSession(false);
+        return;
+      }
+
+      console.log('✅ Session created:', {
+        sessionID: newSessionID,
+        expiresAt: expiresAt ? new Date(expiresAt).toLocaleTimeString() : 'N/A',
+        hasToken: !!newAuthToken,
+        tokenPreview: newAuthToken ? newAuthToken.substring(0, 20) + '...' : 'none'
+      });
+
+      // 🆕 Store session data in state
+      setSessionID(newSessionID);
+      setAuthToken(newAuthToken);
+
+      // 🆕 Store JWT in sessionStorage (API interceptor will use this!)
+      sessionStorage.setItem('authToken', newAuthToken);
+      sessionStorage.setItem('sessionID', newSessionID);
+      if (expiresAt) {
+        sessionStorage.setItem('sessionExpiry', expiresAt);
+      }
+
+      console.log('💾 Session data stored in sessionStorage');
+
+      // STEP 3C: Generate voter proofs for voting
+      const proofs = await generateVoterProofs(aadhaar, voterId, verifiedIdentity.name);
+
+      // STEP 3D: Final check - make sure they haven't voted during this process
+      const voterStatusRes = await apiClient.get(
+        `/voters/${selectedElection.id}/${proofs.voterProof}`
+      );
+
+      if (voterStatusRes.data.success && voterStatusRes.data.hasVoted) {
+        setError('You have already voted in this election.');
+        setIsLoading(false);
+        setIsCreatingSession(false);
+        return;
+      }
+
+      // 🆕 STEP 3E: Navigate to voting page with session data
+      const userObject = {
+        name: verifiedIdentity.name,
+        state: verifiedIdentity.state,
+        voterProof: proofs.voterProof,
+        hashedAadhaar: proofs.hashedAadhaar,
+        hashedVoterID: proofs.hashedVoterID,
+        hashedName: proofs.hashedName,
+      };
+
+      console.log('🚀 Navigating to voting dashboard with session:', {
+        hasSessionID: !!newSessionID,
+        hasAuthToken: !!newAuthToken,
+        hasExpiry: !!expiresAt
+      });
+
+      navigate('/vote', {
+        state: {
+          user: userObject,
+          election: selectedElection,
+          // 🆕 Pass session data to voting page
+          sessionID: newSessionID,
+          authToken: newAuthToken,
+          sessionExpiry: expiresAt
+        },
+      });
+
     } catch (err) {
-      console.error('Verify OTP error:', err);
-      setError(err.response?.data?.message || 'Invalid OTP. Please try again.');
+      console.error('❌ Login error:', err);
+      console.error('Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
+      setError(err.response?.data?.message || 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
+      setIsCreatingSession(false);
     }
   };
 
   // ============================================
-  // 6. Resend OTP (NEW)
+  // 6. Resend OTP
   // ============================================
   const handleResendOTP = async () => {
     setIsResendingOTP(true);
@@ -271,7 +370,7 @@ export default function VoterLogin() {
   };
 
   // ============================================
-  // 7. Handle OTP Input (NEW - Auto-focus next box)
+  // 7. Handle OTP Input (Auto-focus next box)
   // ============================================
   const handleOTPChange = (index, value) => {
     if (!/^\d*$/.test(value)) return; // Only digits
@@ -328,7 +427,7 @@ export default function VoterLogin() {
   return (
     <div className="min-h-screen flex bg-gray-50 font-sans">
       
-      {/* Left Panel - Hero Section (OLD UI PRESERVED) */}
+      {/* Left Panel - Hero Section */}
       <div className="hidden lg:flex w-1/2 relative overflow-hidden flex-col justify-between p-12 text-white" style={{ backgroundImage: "url('/india-gate.jpg')", backgroundSize: 'cover', backgroundPosition: 'center' }}>
         <div className="absolute inset-0 bg-black/40"></div>
         <div className="relative z-10">
@@ -354,7 +453,7 @@ export default function VoterLogin() {
       {/* Right Panel - Login Form */}
       <div className="w-full lg:w-1/2 flex flex-col">
         
-        {/* Header Actions (OLD UI PRESERVED) */}
+        {/* Header Actions */}
         <div className="p-6 flex justify-end gap-3">
           <button
             onClick={handleShowResults}
@@ -380,16 +479,16 @@ export default function VoterLogin() {
         <div className="flex-1 flex items-center justify-center p-8 sm:p-12">
           <div className="w-full max-w-md space-y-8">
             
-            {/* ✨ Conditional Rendering: Show either Login Form or OTP Form */}
+            {/* Conditional Rendering: Show either Login Form or OTP Form */}
             {!showOTPStep ? (
               <>
-                {/* STEP 1: Identity Verification Form (OLD UI) */}
+                {/* STEP 1: Identity Verification Form */}
                 <div className="text-center lg:text-left">
                   <h2 className="text-3xl font-bold text-gray-900">Voter Login</h2>
                   <p className="mt-2 text-gray-600">Enter your details to verify identity</p>
                 </div>
 
-                {/* Election Selector (OLD UI) */}
+                {/* Election Selector */}
                 <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Select Election</label>
                   <button 
@@ -431,7 +530,7 @@ export default function VoterLogin() {
                   </AnimatePresence>
                 </div>
 
-                {/* Login Form (OLD UI) */}
+                {/* Login Form */}
                 <form onSubmit={handleVerifyIdentity} className="space-y-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Aadhaar Number</label>
@@ -493,7 +592,7 @@ export default function VoterLogin() {
               </>
             ) : (
               <>
-                {/* STEP 2: OTP Verification Form (NEW - Styled to match OLD UI) */}
+                {/* STEP 2: OTP Verification Form */}
                 <div className="text-center lg:text-left">
                   <h2 className="text-3xl font-bold text-gray-900">Enter OTP</h2>
                   <p className="mt-2 text-gray-600">
@@ -550,7 +649,7 @@ export default function VoterLogin() {
                     </button>
                   </div>
 
-                  {/* Submit Button */}
+                  {/* Submit Button - 🆕 Updated loading state */}
                   <button
                     type="submit"
                     disabled={isLoading || otp.join('').length !== 6}
@@ -559,11 +658,11 @@ export default function VoterLogin() {
                     {isLoading ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                        Verifying...
+                        {isCreatingSession ? 'Creating Secure Session...' : 'Verifying OTP...'}
                       </>
                     ) : (
                       <>
-                        Verify OTP
+                        Verify OTP & Login
                         <ArrowRight className="ml-2 h-5 w-5" />
                       </>
                     )}
@@ -588,7 +687,7 @@ export default function VoterLogin() {
         </div>
       </div>
 
-      {/* Identity Verification Modal (OLD UI - Updated to call handleSendOTP) */}
+      {/* Identity Verification Modal */}
       <AnimatePresence>
         {showIdentityModal && verifiedIdentity && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -627,7 +726,6 @@ export default function VoterLogin() {
                   </div>
                 </div>
 
-                {/* ✨ Show Email if available */}
                 {verifiedIdentity.maskedEmail && (
                   <div className="flex items-center gap-4 p-4 bg-orange-50 rounded-xl border border-orange-100">
                     <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center text-orange-600">
