@@ -774,7 +774,6 @@ export default function VoterLogin() {
         isOpen={showResults}
         onClose={() => setShowResults(false)}
         electionId={selectedElection?.id}
-        apiBaseUrl="http://localhost:3000"
       />
       
       {/* Verify Vote Modal */}
