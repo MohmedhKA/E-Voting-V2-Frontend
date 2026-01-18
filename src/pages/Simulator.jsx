@@ -32,7 +32,7 @@ export default function Simulator() {
   // Test configuration
   const [voteCount, setVoteCount] = useState(100);
   const [batchSize, setBatchSize] = useState(50);
-  const [testMode, setTestMode] = useState('realistic'); // 'realistic' or 'fast'
+  const [testMode, setTestMode] = useState('realistic'); // 'realistic', 'fast', or 'production'
   
   // Test state
   const [isRunning, setIsRunning] = useState(false);
@@ -47,7 +47,9 @@ export default function Simulator() {
     tps: 0,
     avgConfirmationTime: 0,
     signatureTime: 0,
-    signaturesPerSec: 0
+    signaturesPerSec: 0,
+    auditTime: 0,
+    avgAuditTime: 0 
   });
   
   // Real-time data
@@ -219,11 +221,16 @@ export default function Simulator() {
       addLog('', 'info');
       
       // Select endpoint based on test mode
-      const endpoint = testMode === 'realistic' 
+      const endpoint = testMode === 'production'
+        ? '/bulk-vote-production'
+        : testMode === 'realistic' 
         ? '/bulk-vote-with-signatures'
         : '/bulk-vote';
-      
-      if (testMode === 'realistic') {
+
+      if (testMode === 'production') {
+        addLog('🏭 Using PRODUCTION mode - FULL flow with PDC audit writes...', 'info');
+        addLog('⚠️  WARNING: This will be SLOW due to blockchain writes!', 'warning');
+      } else if (testMode === 'realistic') {
         addLog('🔐 Using REALISTIC mode - generating Dilithium signatures...', 'info');
       } else {
         addLog('⚡ Using FAST mode - skipping cryptography...', 'info');
@@ -263,16 +270,21 @@ export default function Simulator() {
               failed: prev.failed + result.failed,
               tps: result.throughput,
               signatureTime: result.signatureTime || 0,
-              signaturesPerSec: result.signaturesPerSec || 0
+              signaturesPerSec: result.signaturesPerSec || 0,
+              auditTime: result.auditTime || 0,  
+              avgAuditTime: result.avgAuditTime || 0 
             }));
             
             // Log batch result
             const batchLog = `✅ Batch ${batchIndex + 1}: ${result.queued} queued, ${result.failed} failed`;
-            const performanceLog = testMode === 'realistic'
+            const performanceLog = testMode === 'production'
+              ? ` | 🏭 PDC: ${result.avgAuditTime}ms avg`
+              : testMode === 'realistic'
               ? ` | 🔐 ${result.signaturesPerSec || 0} sigs/sec`
               : ` | ⚡ ${result.throughput} votes/sec`;
-            
+
             addLog(batchLog + performanceLog, result.failed > 0 ? 'warning' : 'success');
+
             
           } else {
             addLog(`❌ Batch ${batchIndex + 1} returned error`, 'error');
@@ -312,7 +324,11 @@ export default function Simulator() {
       addLog(`   • Overall throughput: ${overallTPS} votes/sec`, 'success');
       addLog(`   • Total time: ${(totalTime / 1000).toFixed(2)}s`, 'info');
       
-      if (testMode === 'realistic' && stats.signatureTime > 0) {
+      if (testMode === 'production' && stats.auditTime > 0) {
+        addLog(`   • Signature + PDC time: ${(stats.signatureTime / 1000).toFixed(2)}s`, 'info');
+        addLog(`   • Total PDC writes: ${(stats.auditTime / 1000).toFixed(2)}s`, 'info');
+        addLog(`   • Avg PDC write: ${stats.avgAuditTime}ms per vote`, 'info');
+      } else if (testMode === 'realistic' && stats.signatureTime > 0) {
         addLog(`   • Signature time: ${(stats.signatureTime / 1000).toFixed(2)}s`, 'info');
         addLog(`   • Signature rate: ${stats.signaturesPerSec} sigs/sec`, 'info');
       }
@@ -438,11 +454,14 @@ export default function Simulator() {
                   className="w-full bg-black/50 border border-green-500/50 rounded-lg px-3 py-2 text-green-300 focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400 disabled:opacity-50"
                 >
                   <option value="realistic">🔐 Realistic (With Crypto)</option>
+                  <option value="production">🏭 Production (Full Flow + PDC)</option>
                   <option value="fast">⚡ Fast (Skip Crypto)</option>
                 </select>
                 <p className="text-xs text-gray-600 mt-2 leading-relaxed">
                   {testMode === 'realistic' 
-                    ? '✅ Tests with REAL Dilithium-3 signatures (accurate performance)'
+                    ? '✅ Tests with REAL Dilithium-3 signatures (no PDC audit)'
+                    : testMode === 'production'
+                    ? '🏭 FULL production flow with PDC audit writes (slowest, most realistic)'
                     : '⚡ Tests queue/blockchain only (max throughput)'
                   }
                 </p>
@@ -619,6 +638,15 @@ export default function Simulator() {
                   icon={<Gauge className="w-4 h-4" />}
                 />
                 
+                {testMode === 'production' && stats.avgAuditTime > 0 && (
+                  <MetricRow 
+                    label="PDC Audit Time" 
+                    value={`${stats.avgAuditTime}ms avg`}
+                    sublabel={`Total PDC writes: ${(stats.auditTime / 1000).toFixed(2)}s`}
+                    icon={<Shield className="w-4 h-4" />}
+                  />
+                )}
+
                 {testMode === 'realistic' && stats.signaturesPerSec > 0 && (
                   <MetricRow 
                     label="Signature Rate" 
@@ -627,7 +655,7 @@ export default function Simulator() {
                     icon={<Shield className="w-4 h-4" />}
                   />
                 )}
-                
+                                
                 {liveMetrics && (
                   <>
                     <MetricRow 
@@ -691,6 +719,23 @@ export default function Simulator() {
                     {((stats.queued / (stats.queued + stats.failed)) * 100).toFixed(1)}%
                   </span>
                 </div>
+                {testMode === 'production' && stats.auditTime > 0 && (
+                  <>
+                    <div className="flex justify-between items-center py-1 border-b border-gray-800">
+                      <span className="text-gray-500">PDC Audit Time:</span>
+                      <span className="text-purple-400 font-bold">
+                        {(stats.auditTime / 1000).toFixed(2)}s
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-1 border-b border-gray-800">
+                      <span className="text-gray-500">Avg PDC Write:</span>
+                      <span className="text-purple-400 font-bold">
+                        {stats.avgAuditTime}ms
+                      </span>
+                    </div>
+                  </>
+                )}
+
                 {testMode === 'realistic' && stats.signatureTime > 0 && (
                   <div className="flex justify-between items-center py-1 border-b border-gray-800">
                     <span className="text-gray-500">Signature Time:</span>

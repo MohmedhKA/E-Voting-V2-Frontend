@@ -5,11 +5,11 @@ import adminClient from '../api/adminClient';
 import ResultsModal from '../components/ResultsModal';
 
 export default function AdminDashboard() {
-  const [electionId, setElectionId] = useState('secure-election-2025');
-  const [title, setTitle] = useState('Secure Admin Election');
+  const [electionId, setElectionId] = useState('SECURE-ELECT-2026');
+  const [title, setTitle] = useState('Secure Election 2026');
   const [description, setDescription] = useState('Admin-created secure election');
   const [candidateInput, setCandidateInput] = useState('');
-  const [candidates, setCandidates] = useState(['KVT', 'DMK']); // Updated defaults to match your theme
+  const [candidates, setCandidates] = useState(['Nithimaran', 'Praveen', 'Pranesh', 'Parashu']); // Updated defaults to match your theme
   const [log, setLog] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const [showResults, setShowResults] = useState(false);
