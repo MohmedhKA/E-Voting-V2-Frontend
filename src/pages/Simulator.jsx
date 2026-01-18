@@ -180,7 +180,9 @@ export default function Simulator() {
       tps: 0,
       avgConfirmationTime: 0,
       signatureTime: 0,
-      signaturesPerSec: 0
+      signaturesPerSec: 0,
+      auditTime: 0, 
+      avgAuditTime: 0        
     });
     clearLogs();
     startTimeRef.current = Date.now();
@@ -370,7 +372,9 @@ export default function Simulator() {
         tps: 0,
         avgConfirmationTime: 0,
         signatureTime: 0,
-        signaturesPerSec: 0
+        signaturesPerSec: 0,
+        auditTime: 0,
+        avgAuditTime: 0
       });
       
       setLiveMetrics(null);

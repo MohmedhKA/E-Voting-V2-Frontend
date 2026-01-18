@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Metrics Debug</title>
+  <style>
+    body {
+      font-family: monospace;
+      background: #1a1a1a;
+      color: #0f0;
+      padding: 20px;
+    }
+    .metric {
+      margin: 10px 0;
+      font-size: 16px;
+    }
+    .error { color: #f00; }
+    .success { color: #0f0; }
+  </style>
+</head>
+<body>
+  <h1>📊 Live Metrics Debug</h1>
+  <div id="metrics"></div>
+
+  <script>
+    const electionId = 'SECURE-ELECT-2026';
+    const metricsDiv = document.getElementById('metrics');
+
+    async function fetchMetrics() {
+      try {
+        const response = await fetch(`https://automatic-space-garbanzo-x5wjwqpqqjgqhv4w9-3000.app.github.dev/api/v1/testing/metrics/${electionId}`);
+        const data = await response.json();
+
+        if (data.success) {
+          const m = data.data;
+          
+          // Calculate values
+          const total = m.votesQueued || 0;
+          const confirmed = m.votesConfirmed || 0;
+          const failed = m.votesFailed || 0;
+          const pending = total - confirmed - failed;
+          const successRate = total > 0 ? ((confirmed / total) * 100).toFixed(2) : 0;
+          const avgConfTime = m.avgConfirmationTime ? (m.avgConfirmationTime / 1000).toFixed(2) : 'N/A';
+
+          metricsDiv.innerHTML = `
+            <div class="metric">⏰ Last Update: ${new Date(m.lastUpdate).toLocaleTimeString()}</div>
+            <div class="metric">📊 Total Queued: ${total}</div>
+            <div class="metric success">✅ Confirmed: ${confirmed}</div>
+            <div class="metric error">❌ Failed: ${failed}</div>
+            <div class="metric">⏳ Pending: ${pending}</div>
+            <div class="metric">📈 Success Rate: ${successRate}%</div>
+            <div class="metric">⚡ Avg Confirmation: ${avgConfTime}s</div>
+            <div class="metric">🚀 Queue Depth: ${m.currentQueueDepth || m.liveQueueDepth || 0}</div>
+          `;
+        } else {
+          metricsDiv.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+        }
+      } catch (err) {
+        metricsDiv.innerHTML = `<div class="error">Fetch Error: ${err.message}</div>`;
+      }
+    }
+
+    // Poll every 500ms
+    setInterval(fetchMetrics, 500);
+    fetchMetrics();
+  </script>
+</body>
+</html>
