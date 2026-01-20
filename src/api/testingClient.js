@@ -5,7 +5,7 @@
 
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL;
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 const ADMIN_API_KEY = import.meta.env.VITE_ADMIN_API_KEY || 'admin-secret-key-123';
 
 const testingClient = axios.create({
@@ -14,7 +14,7 @@ const testingClient = axios.create({
     'Content-Type': 'application/json',
     'x-api-key': ADMIN_API_KEY,
   },
-  timeout: 30000, // 30 second timeout for bulk operations
+  timeout: 600000, // 10 minutes for long-running simulations
 });
 
 export default testingClient;
