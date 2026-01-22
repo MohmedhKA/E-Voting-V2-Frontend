@@ -486,8 +486,8 @@ export default function Simulator() {
                 
                 <MetricRow 
                   label="PDC Audit Time" 
-                  value={`${finalMetrics.avgPdcWrite}ms avg`}
-                  sublabel={`Total: ${(finalMetrics.totalPdcTime / 1000).toFixed(2)}s`}
+                  value={`Background Process`}
+                  sublabel={`Non-blocking async worker`}
                   icon={<Shield className="w-4 h-4" />}
                 />
                 
