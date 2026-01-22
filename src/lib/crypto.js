@@ -38,9 +38,9 @@ export async function generateVoterProofs(aadhaar, voterId, name) {
   const hashedVoterID = await sha256(voterId);
   const hashedName = await sha256(name);
 
-  // The voterProof is the hash of the other two hashes combined,
-  // matching the chaincode logic.
-  const voterProof = await sha256(hashedAadhaar + hashedVoterID);
+  // ✅ FIX: Match backend hash generation (aadhaar:voterId with colon!)
+  // Backend uses: SHA256(aadhaar:voterId)
+  const voterProof = await sha256(`${aadhaar}:${voterId}`);
 
   return {
     hashedAadhaar,
