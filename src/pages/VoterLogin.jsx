@@ -152,7 +152,7 @@ export default function VoterLogin() {
       );
 
       if (voterStatusRes.data.success && voterStatusRes.data.hasVoted) {
-        setError('⚠️ You have already voted in this election. Your vote has been recorded.');
+        setError('⚠️ You have already voted in this election.');
         setIsLoading(false);
         
         // ✅ FIX: Clear form after 5 seconds
