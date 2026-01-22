@@ -4,7 +4,7 @@
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle, Clock, FileText, Shield, Copy, Home, RefreshCw } from 'lucide-react';
+import { X, CheckCircle, Clock, FileText, Shield, Copy, Home } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -36,11 +36,6 @@ export default function VoteSuccessModal({
   const handleGoHome = () => {
     onClose();
     navigate('/');
-  };
-
-  const handleVoteAgain = () => {
-    onClose();
-    window.location.reload();
   };
 
   return (
@@ -285,20 +280,13 @@ export default function VoteSuccessModal({
               </div>
 
               {/* Action Buttons */}
-              <div className="p-8 pt-0 flex gap-4">
+              <div className="p-8 pt-0 flex justify-center">
                 <button
                   onClick={handleGoHome}
-                  className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors shadow-md hover:shadow-lg active:scale-95"
+                  className="flex items-center justify-center gap-2 px-6 py-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors shadow-md hover:shadow-lg active:scale-95"
                 >
                   <Home className="w-5 h-5" />
                   Back to Home
-                </button>
-                <button
-                  onClick={handleVoteAgain}
-                  className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-bold hover:from-green-700 hover:to-emerald-700 transition-all shadow-md hover:shadow-lg active:scale-95"
-                >
-                  <RefreshCw className="w-5 h-5" />
-                  Vote Again
                 </button>
               </div>
             </motion.div>

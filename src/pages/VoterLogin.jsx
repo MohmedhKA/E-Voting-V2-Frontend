@@ -1,5 +1,5 @@
 // client/src/pages/VoterLogin.jsx
-// ✨ Updated Version: Added Session Creation + JWT Flow
+// ✨ Updated Version: Added Session Creation + JWT Flow + OTP UX Fixes
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -60,7 +60,6 @@ export default function VoterLogin() {
   useEffect(() => {
     const fetchElections = async () => {
       try {
-        // 🆕 CHANGED: Use /public/active instead of /elections/active
         const res = await apiClient.get('/elections/active');
         if (res.data.success) {
           setElections(res.data.data);
@@ -94,6 +93,15 @@ export default function VoterLogin() {
 
     return () => clearInterval(timer);
   }, [otpExpiry]);
+
+  // ✅ NEW: Auto-focus first OTP input when OTP step shows
+  useEffect(() => {
+    if (showOTPStep) {
+      setTimeout(() => {
+        document.getElementById('otp-0')?.focus();
+      }, 100);
+    }
+  }, [showOTPStep]);
 
   // Format timer: 09:45
   const formatTimer = (seconds) => {
@@ -146,6 +154,15 @@ export default function VoterLogin() {
       if (voterStatusRes.data.success && voterStatusRes.data.hasVoted) {
         setError('⚠️ You have already voted in this election. Your vote has been recorded.');
         setIsLoading(false);
+        
+        // ✅ FIX: Clear form after 5 seconds
+        setTimeout(() => {
+          setAadhaar('');
+          setVoterId('');
+          setError('');
+          setVerifiedIdentity(null);
+        }, 5000);
+        
         return; // Stop here - don't proceed to OTP
       }
 
@@ -191,7 +208,7 @@ export default function VoterLogin() {
   };
 
   // ============================================
-  // 5. STEP 3: Verify OTP & Create Session (FIXED!)
+  // 5. STEP 3: Verify OTP & Create Session
   // ============================================
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
@@ -233,7 +250,6 @@ export default function VoterLogin() {
         electionId: selectedElection.id
       });
 
-      // 🔧 DEBUG: Log full response to see structure
       console.log('📦 Full session response:', sessionRes.data);
 
       if (!sessionRes.data.success) {
@@ -243,15 +259,13 @@ export default function VoterLogin() {
         return;
       }
 
-      // 🔧 FIX: Handle both response formats
-      // Format 1: { success, sessionID, authToken, expiresAt }
-      // Format 2: { success, data: { sessionID, authToken, expiresAt } }
+      // Handle both response formats
       const sessionData = sessionRes.data.data || sessionRes.data;
       const newSessionID = sessionData.sessionID;
       const newAuthToken = sessionData.authToken;
       const expiresAt = sessionData.expiresAt;
 
-      // 🔧 VALIDATE: Make sure we got the required data
+      // Validate session data
       if (!newSessionID || !newAuthToken) {
         console.error('❌ Session creation failed - missing required fields:', {
           hasSessionID: !!newSessionID,
@@ -273,11 +287,11 @@ export default function VoterLogin() {
         tokenPreview: newAuthToken ? newAuthToken.substring(0, 20) + '...' : 'none'
       });
 
-      // 🆕 Store session data in state
+      // Store session data in state
       setSessionID(newSessionID);
       setAuthToken(newAuthToken);
 
-      // 🆕 Store JWT in sessionStorage (API interceptor will use this!)
+      // Store JWT in sessionStorage
       sessionStorage.setItem('authToken', newAuthToken);
       sessionStorage.setItem('sessionID', newSessionID);
       if (expiresAt) {
@@ -301,7 +315,7 @@ export default function VoterLogin() {
         return;
       }
 
-      // 🆕 STEP 3E: Navigate to voting page with session data
+      // STEP 3E: Navigate to voting page with session data
       const userObject = {
         name: verifiedIdentity.name,
         state: verifiedIdentity.state,
@@ -321,7 +335,6 @@ export default function VoterLogin() {
         state: {
           user: userObject,
           election: selectedElection,
-          // 🆕 Pass session data to voting page
           sessionID: newSessionID,
           authToken: newAuthToken,
           sessionExpiry: expiresAt
@@ -343,12 +356,17 @@ export default function VoterLogin() {
   };
 
   // ============================================
-  // 6. Resend OTP
+  // 6. Resend OTP (IMPROVED)
   // ============================================
   const handleResendOTP = async () => {
     setIsResendingOTP(true);
     setError('');
     setOtp(['', '', '', '', '', '']);
+
+    // ✅ Focus first input after clearing
+    setTimeout(() => {
+      document.getElementById('otp-0')?.focus();
+    }, 100);
 
     try {
       const res = await apiClient.post('/identity/send-otp', { aadhaar, voterId });
@@ -357,7 +375,17 @@ export default function VoterLogin() {
         const expiryMinutes = res.data.data.expiryMinutes || 10;
         const expiryTime = Date.now() + expiryMinutes * 60 * 1000;
         setOtpExpiry(expiryTime);
-        alert('✅ New OTP sent to your email!');
+        
+        // ✅ Better notification (no alert popup)
+        console.log('✅ New OTP sent to', res.data.data.maskedEmail);
+        
+        // Show toast notification
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slide-in';
+        toast.textContent = '✅ New OTP sent to your email!';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+        
       } else {
         setError('Failed to resend OTP. Please try again.');
       }
@@ -370,14 +398,49 @@ export default function VoterLogin() {
   };
 
   // ============================================
-  // 7. Handle OTP Input (Auto-focus next box)
+  // 7. Handle OTP Input (IMPROVED - Fixed UX Issues)
   // ============================================
+  
+  // ✅ NEW: Handle paste event (paste full 6-digit OTP)
+  const handleOTPPaste = (e) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').trim();
+    
+    // Only accept 6-digit numbers
+    if (!/^\d{6}$/.test(pastedData)) {
+      setError('Invalid OTP format. Please paste a valid 6-digit code.');
+      return;
+    }
+    
+    // Split pasted OTP into array
+    const newOTP = pastedData.split('');
+    setOtp(newOTP);
+    
+    // Focus last input
+    document.getElementById('otp-5')?.focus();
+    
+    // Clear error
+    setError('');
+    
+    console.log('✅ OTP pasted successfully');
+  };
+
+  // ✅ IMPROVED: Better input handling
   const handleOTPChange = (index, value) => {
-    if (!/^\d*$/.test(value)) return; // Only digits
+    // Only allow digits
+    if (!/^\d*$/.test(value)) return;
 
     const newOTP = [...otp];
-    newOTP[index] = value.slice(-1); // Only last digit
+    
+    // Handle multiple digits (Android auto-fill behavior)
+    if (value.length > 1) {
+      newOTP[index] = value.slice(-1);
+    } else {
+      newOTP[index] = value;
+    }
+    
     setOtp(newOTP);
+    setError(''); // Clear error on input
 
     // Auto-focus next input
     if (value && index < 5) {
@@ -385,14 +448,36 @@ export default function VoterLogin() {
     }
   };
 
+  // ✅ IMPROVED: Better keyboard navigation
   const handleOTPKeyDown = (index, e) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+    // Backspace: Clear current and focus previous
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      const newOTP = [...otp];
+      
+      if (otp[index]) {
+        // Clear current box
+        newOTP[index] = '';
+        setOtp(newOTP);
+      } else if (index > 0) {
+        // Move to previous and clear it
+        newOTP[index - 1] = '';
+        setOtp(newOTP);
+        document.getElementById(`otp-${index - 1}`)?.focus();
+      }
+    }
+    
+    // Arrow keys navigation
+    if (e.key === 'ArrowLeft' && index > 0) {
       document.getElementById(`otp-${index - 1}`)?.focus();
+    }
+    if (e.key === 'ArrowRight' && index < 5) {
+      document.getElementById(`otp-${index + 1}`)?.focus();
     }
   };
 
   // ============================================
-  // 8. Fetch Results for Modal
+  // 8. Fetch Results & Verify Vote
   // ============================================
   const handleShowResults = () => {
     if (!selectedElection) {
@@ -604,7 +689,7 @@ export default function VoterLogin() {
                 </div>
 
                 <form onSubmit={handleVerifyOTP} className="space-y-6">
-                  {/* OTP Input Boxes */}
+                  {/* OTP Input Boxes - ✅ FIXED WITH PASTE & AUTOCOMPLETE */}
                   <div className="flex justify-center gap-2">
                     {otp.map((digit, index) => (
                       <input
@@ -616,6 +701,11 @@ export default function VoterLogin() {
                         value={digit}
                         onChange={(e) => handleOTPChange(index, e.target.value)}
                         onKeyDown={(e) => handleOTPKeyDown(index, e)}
+                        onPaste={(e) => handleOTPPaste(e)}
+                        autoComplete="one-time-code"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck="false"
                         className="w-12 h-14 text-center text-black text-2xl font-bold bg-white border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                       />
                     ))}
@@ -649,7 +739,7 @@ export default function VoterLogin() {
                     </button>
                   </div>
 
-                  {/* Submit Button - 🆕 Updated loading state */}
+                  {/* Submit Button */}
                   <button
                     type="submit"
                     disabled={isLoading || otp.join('').length !== 6}
