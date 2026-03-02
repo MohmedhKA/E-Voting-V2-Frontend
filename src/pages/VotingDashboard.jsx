@@ -92,29 +92,33 @@ export default function VotingDashboard() {
   useEffect(() => {
     if (!sessionExpiry) return;
 
-    const timer = setInterval(() => {
-      const now = Date.now();
-      const expiry = new Date(sessionExpiry).getTime();
-      const remaining = Math.max(0, Math.floor((expiry - now) / 1000));
-      setSessionTimeRemaining(remaining);
+    const expiry = new Date(sessionExpiry).getTime();
 
+    const updateTimer = () => {
+      const remaining = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
+      setSessionTimeRemaining(remaining);
       if (remaining === 0) {
-        clearInterval(timer);
         alert('⚠️ Session expired! Please login again.');
         navigate('/');
       }
-    }, 1000);
+    };
 
-    return () => clearInterval(timer);
+    updateTimer(); // Set immediately on mount — no 1-second blank
+
+    const timer = setInterval(updateTimer, 1000);
+
+    // ✅ Snap correct the instant tab becomes visible again
+    const handleVisibilityChange = () => {
+      if (!document.hidden) updateTimer();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [sessionExpiry, navigate]);
 
-  // Format session timer: 09:45
-  const formatSessionTimer = (seconds) => {
-    if (!seconds) return '--:--';
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
 
   // ============================================
   // Dynamic Candidates Mapping

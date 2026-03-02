@@ -40,7 +40,7 @@ export async function generateVoterProofs(aadhaar, voterId, name) {
 
   // ✅ FIX: Match backend hash generation (aadhaar:voterId with colon!)
   // Backend uses: SHA256(aadhaar:voterId)
-  const voterProof = await sha256(`${aadhaar}:${voterId}`);
+  const voterProof = await sha256(hashedAadhaar + hashedVoterID);
 
   return {
     hashedAadhaar,
