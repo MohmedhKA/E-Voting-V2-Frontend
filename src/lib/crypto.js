@@ -118,5 +118,5 @@ export function createBlindedVote(electionId, candidateId) {
  * @returns {string} A unique batch ID
  */
 export function generateBatchID() {
-  return `BATCH_${Date.now()}`;
+  return `BATCH_${Math.floor(Date.now() / 60000)}`;
 }
