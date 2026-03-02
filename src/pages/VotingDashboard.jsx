@@ -26,6 +26,13 @@ const getCandidateColor = (index) => {
   return colors[index % colors.length];
 };
 
+function formatSessionTimer(seconds) {
+  if (seconds === null || seconds === undefined) return '--:--';
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
 export default function VotingDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -253,23 +260,22 @@ export default function VotingDashboard() {
       console.log('📮 Casting anonymous vote...');
 
       const votePayload = {
-        voteID: generatedVoteID,           // 🆕 Random ID (not linked to voter!)
-        electionId: election.id,
-        candidateId: selectedCandidate,
-        blindSignature: receivedBlindSignature,  // 🆕 EC's signature
-        batchID: batchID                   // 🆕 For anonymity set
-        // ❌ NO hashedAadhaar!
-        // ❌ NO voterProof!
-        // ❌ NO hashedVoterID!
-        // ❌ NOTHING that links to voter identity!
+          voteID: generatedVoteID,
+          electionId: election.id,
+          blindedVoteToken: blindedVote,         // The XOR-blinded bytes (base64)
+          blindingKey: blindingKey,              // XOR key — sent AFTER EC signed (EC never saw this)
+          nonce: nonce,                          // Same nonce used for commitment
+          blindSignature: receivedBlindSignature,
+          batchID: batchID
       };
 
       console.log('📦 Vote payload (ANONYMOUS):', {
-        voteID: votePayload.voteID,
-        electionId: votePayload.electionId,
-        candidateId: votePayload.candidateId,
-        hasBlindSignature: !!votePayload.blindSignature,
-        batchID: votePayload.batchID
+          voteID: votePayload.voteID,
+          electionId: votePayload.electionId,
+          hasBlindedVote: !!votePayload.blindedVoteToken,  // ← replace candidateId log
+          hasBlindingKey: !!votePayload.blindingKey,
+          hasBlindSignature: !!votePayload.blindSignature,
+          batchID: votePayload.batchID
       });
 
       const voteRes = await apiClient.post('/votes', votePayload);
