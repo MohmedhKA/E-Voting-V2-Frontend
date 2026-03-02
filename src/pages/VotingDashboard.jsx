@@ -52,6 +52,9 @@ export default function VotingDashboard() {
   // 🆕 NEW: Vote ID State (for receipt)
   const [voteID, setVoteID] = useState(null);
 
+  // 🆕 NEW: Blinding Key State (used later to unblind signature)
+  const [blindingKey, setBlindingKey] = useState(null);
+
   // Receipt State
   const [receipt, setReceipt] = useState(null);
   const [isPollingReceipt, setIsPollingReceipt] = useState(false);
@@ -196,7 +199,8 @@ export default function VotingDashboard() {
       // ============================================
       // STEP 2: Create blinded vote (EC can't see choice!)
       // ============================================
-      const blindedVote = createBlindedVote(election.id, selectedCandidate);
+      const { blindedVote, blindingKey } = createBlindedVote(election.id, selectedCandidate);
+      setBlindingKey(blindingKey);
       
       console.log('🎭 Created blinded vote:', blindedVote.substring(0, 30) + '...');
 

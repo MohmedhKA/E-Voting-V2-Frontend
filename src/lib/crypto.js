@@ -83,33 +83,28 @@ export function generateNonce() {
   return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
 }
 
-/**
- * Create a blinded vote (base64 encoded)
- * 
- * This creates a "blinded" representation of your vote that the EC can sign
- * WITHOUT knowing who you're voting for or who you are!
- * 
- * The vote data is:
- * 1. Combined with timestamp (uniqueness)
- * 2. Base64 encoded (standard format)
- * 3. Sent to EC for blind signature
- * 
- * Security: The EC sees encoded data but can't decode your choice!
- * 
- * @param {string} electionId - The election ID
- * @param {string} candidateId - The candidate being voted for
- * @returns {string} Base64 encoded blinded vote
- */
+// ✅ FIXED — XOR blinding makes the content cryptographically opaque to EC
 export function createBlindedVote(electionId, candidateId) {
   const voteData = {
     election: electionId,
     candidate: candidateId,
-    timestamp: Date.now() // Prevents duplicate signatures
+    timestamp: Date.now()
   };
-  
-  // Convert to JSON string, then base64 encode
-  return btoa(JSON.stringify(voteData));
+
+  const voteBytes = new TextEncoder().encode(JSON.stringify(voteData));
+  const blindingKey = new Uint8Array(voteBytes.length);
+  crypto.getRandomValues(blindingKey); // Cryptographically secure random mask
+
+  // XOR every byte of voteData with the blindingKey — makes it unreadable
+  const blinded = voteBytes.map((b, i) => b ^ blindingKey[i]);
+
+  // Return BOTH — blindedVote goes to EC, blindingKey stays in browser memory
+  return {
+    blindedVote: btoa(String.fromCharCode(...blinded)),
+    blindingKey: Array.from(blindingKey) // Stored locally, used to unblind after signing
+  };
 }
+
 
 /**
  * Generate a batch ID for vote grouping
