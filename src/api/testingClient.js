@@ -6,15 +6,14 @@
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-const ADMIN_API_KEY = import.meta.env.VITE_ADMIN_API_KEY || 'admin-secret-key-123';
 
 const testingClient = axios.create({
   baseURL: `${API_BASE_URL}/testing`,
+  timeout: 600000, // 10 minutes for long-running simulations
   headers: {
     'Content-Type': 'application/json',
-    'x-api-key': ADMIN_API_KEY,
+    'x-testing-key': import.meta.env.VITE_TESTING_SECRET_KEY || 'evoting-sim-2026',
   },
-  timeout: 600000, // 10 minutes for long-running simulations
 });
 
 export default testingClient;
