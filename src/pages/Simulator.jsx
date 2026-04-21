@@ -13,11 +13,6 @@ import {
 import apiClient from '../api/client';
 import testingClient from '../api/testingClient';
 
-/**
- * Generates a realistic election-style weight distribution.
- * One dominant leader, strong second, rest trailing off.
- * Small noise added so results differ each run.
- */
 function generateElectionWeights(count) {
   const baseProfiles = {
     1: [1.00],
@@ -30,29 +25,29 @@ function generateElectionWeights(count) {
     8: [0.28, 0.20, 0.15, 0.12, 0.09, 0.07, 0.05, 0.04],
   };
 
-  // Fallback for > 8 candidates: geometric decay
   const base = baseProfiles[count] || (() => {
     const weights = Array.from({ length: count }, (_, i) => Math.pow(0.75, i));
     const sum = weights.reduce((a, b) => a + b, 0);
     return weights.map(w => w / sum);
   })();
 
-  // Add small noise (±3%) so it's never identical each run
+  // Add small noise (±3%)
   const noisy = base.map(w => Math.max(0.01, w + (Math.random() * 0.06 - 0.03)));
 
-  // Re-normalize so weights always sum to exactly 1.0
+  // ✅ KEY FIX: Shuffle so any candidate can get any weight slot
+  for (let i = noisy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [noisy[i], noisy[j]] = [noisy[j], noisy[i]];
+  }
+
+  // Re-normalize to sum = 1.0
   const total = noisy.reduce((a, b) => a + b, 0);
   return noisy.map(w => w / total);
 }
 
-/**
- * Builds a weighted candidate list from election candidates.
- * Returns array of candidateId strings, with each ID repeated
- * proportionally to its weight — so backend random pick = realistic result.
- */
 function buildWeightedCandidatePool(candidates, weights) {
   const pool = [];
-  const POOL_SIZE = 1000; // resolution of distribution
+  const POOL_SIZE = 1000;
 
   candidates.forEach((c, i) => {
     const id = typeof c === 'string' ? c : c.id;
@@ -60,7 +55,7 @@ function buildWeightedCandidatePool(candidates, weights) {
     for (let j = 0; j < count; j++) pool.push(id);
   });
 
-  // Shuffle the pool so order doesn't bias early votes
+  // Shuffle pool
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
