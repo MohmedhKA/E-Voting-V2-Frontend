@@ -97,8 +97,8 @@ export async function blindBallot(payload, nHex, eHex) {
   const n = BigInt('0x' + nHex);
   const e = BigInt('0x' + eHex);
   
-  const payloadStr = JSON.stringify(payload);
-  const m = await sha256ToBigInt(payloadStr);
+  const message = `${payload.electionId}:${payload.candidateId}:${payload.voteID}`;
+  const m = await sha256ToBigInt(message);
   
   let r;
   // Generate random 256-byte blinding factor r until gcd(r, n) == 1

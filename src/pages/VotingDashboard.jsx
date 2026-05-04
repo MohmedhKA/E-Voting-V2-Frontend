@@ -263,8 +263,11 @@ export default function VotingDashboard() {
       console.log('📮 Casting anonymous vote with valid unblinded signature...');
 
       const voteRes = await apiClient.post('/votes/submit', {
-        ballot: ballotPayload,
-        signature: signatureHex
+        voteID: generatedVoteID,
+        electionId: election.id,
+        candidateId: selectedCandidate,
+        blindSignature: signatureHex,
+        batchID: batchID
       });
 
       if (!voteRes.data.success) {
