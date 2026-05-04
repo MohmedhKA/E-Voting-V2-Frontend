@@ -18,7 +18,8 @@ import {
 } from 'lucide-react';
 import apiClient from '../api/client';
 import VoteSuccessModal from '../components/VoteSuccessModal';
-import { generateVoteID, createBlindedVote, generateNonce, generateBatchID } from '../lib/crypto';
+import { generateVoteID, generateNonce, generateBatchID } from '../lib/crypto';
+import { blindBallot, unblind } from '../lib/rsaBlind';
 
 // Helper to get random color for candidates based on index
 const getCandidateColor = (index) => {
@@ -49,8 +50,7 @@ export default function VotingDashboard() {
   const [error, setError] = useState('');
 
   // 🆕 NEW: Blind Signature State
-  const [isRequestingSignature, setIsRequestingSignature] = useState(false);
-  const [blindSignature, setBlindSignature] = useState(null);
+  const [votingStatus, setVotingStatus] = useState('');
 
   // 🆕 NEW: Verification Token State (one-time candidate verification)
   const [verificationToken, setVerificationToken] = useState(null);
@@ -58,9 +58,6 @@ export default function VotingDashboard() {
 
   // 🆕 NEW: Vote ID State (for receipt)
   const [voteID, setVoteID] = useState(null);
-
-  // 🆕 NEW: Blinding Key State (used later to unblind signature)
-  const [blindingKey, setBlindingKey] = useState(null);
 
   // Receipt State
   const [receipt, setReceipt] = useState(null);
@@ -183,7 +180,7 @@ export default function VotingDashboard() {
   };
 
   // ============================================
-  // 🆕 COMPLETELY REWRITTEN: Handle Vote with Blind Signature (FIXED!)
+  // 🆕 COMPLETELY REWRITTEN: Handle Vote with True Client-Side RSA Blind Signature
   // ============================================
   const handleVote = async () => {
     if (!selectedCandidate || isVoting) return;
@@ -207,81 +204,68 @@ export default function VotingDashboard() {
         batchID
       });
 
-      // ============================================
-      // STEP 2: Create blinded vote (EC can't see choice!)
-      // ============================================
-      const { blindedVote, blindingKey } = createBlindedVote(election.id, selectedCandidate);
-      setBlindingKey(blindingKey);
-      
-      console.log('🎭 Created blinded vote:', blindedVote.substring(0, 30) + '...');
+      const ballotPayload = {
+        voteID: generatedVoteID,
+        electionId: election.id,
+        candidateId: selectedCandidate,
+        nonce,
+        batchID,
+        timestamp: Date.now()
+      };
+
+      setVotingStatus('Preparing secure ballot...');
+
+      // Get EC Public Key
+      const pubKeyRes = await apiClient.get('/ec/public-key');
+      const pubKeyData = pubKeyRes.data.data || pubKeyRes.data;
+      const { n, e } = pubKeyData;
+
+      if (!n || !e) throw new Error("Failed to retrieve EC public key");
 
       // ============================================
-      // STEP 3: Request blind signature from EC (FIXED!)
+      // STEP 2: Create true mathematically blinded ballot
       // ============================================
-      setIsRequestingSignature(true);
+      const { blindedMessageHex, r } = await blindBallot(ballotPayload, n, e);
+      console.log('🎭 Ballot mathematically blinded');
+
+      // ============================================
+      // STEP 3: Request blind signature from EC
+      // ============================================
+      setVotingStatus('Requesting authorization...');
       console.log('📝 Requesting blind signature from EC...');
 
       const sigRes = await apiClient.post('/ec/request-blind-signature', {
-        sessionID: sessionID,
-        blindedVote: blindedVote,
+        blindedMessage: blindedMessageHex,
+        sessionID: sessionID, // sent for auth
         nonce: nonce
       });
 
-      // 🔧 DEBUG: Log full response to see structure
-      console.log('📦 Blind signature response:', sigRes.data);
-
-      if (!sigRes.data.success) {
-        throw new Error(sigRes.data.message || 'Blind signature request failed');
-      }
-
-      // 🔧 FIX: Handle both flat and nested response structures
-      // Format 1: { success, blindSignature, auditID }
-      // Format 2: { success, data: { blindSignature, auditID } }
       const signatureData = sigRes.data.data || sigRes.data;
-      const receivedBlindSignature = signatureData.blindSignature;
+      const receivedBlindedSignatureHex = signatureData.blindedSignature || signatureData.blindSignature;
 
-      // 🔧 VALIDATE: Make sure we actually got the signature
-      if (!receivedBlindSignature) {
-        console.error('❌ Blind signature missing in response:', {
-          fullResponse: sigRes.data,
-          signatureData: signatureData
-        });
+      if (!receivedBlindedSignatureHex) {
         throw new Error('Backend error: Blind signature not returned');
       }
-
-      setBlindSignature(receivedBlindSignature);
-      setIsRequestingSignature(false);
-
-      console.log('✅ Received blind signature:', receivedBlindSignature.substring(0, 30) + '...');
+      console.log('✅ Received blinded signature from EC');
 
       // ============================================
-      // STEP 4: Cast vote with blind signature (ANONYMOUS!)
+      // STEP 4: Unblind the signature in browser (Discard r)
       // ============================================
-      console.log('📮 Casting anonymous vote...');
+      setVotingStatus('Finalizing...');
+      const signatureHex = unblind(receivedBlindedSignatureHex, r, n);
+      console.log('✅ Unblinded signature successfully');
+      // r variable will be automatically garbage collected here
 
-      const votePayload = {
-          voteID: generatedVoteID,
-          electionId: election.id,
-          blindedVoteToken: blindedVote,         // The XOR-blinded bytes (base64)
-          blindingKey: blindingKey,              // XOR key — sent AFTER EC signed (EC never saw this)
-          nonce: nonce,                          // Same nonce used for commitment
-          blindSignature: receivedBlindSignature,
-          batchID: batchID
-      };
+      // ============================================
+      // STEP 5: Cast unblinded vote (ANONYMOUS!)
+      // ============================================
+      setVotingStatus('Submitting vote...');
+      console.log('📮 Casting anonymous vote with valid unblinded signature...');
 
-      console.log('📦 Vote payload (ANONYMOUS):', {
-          voteID: votePayload.voteID,
-          electionId: votePayload.electionId,
-          hasBlindedVote: !!votePayload.blindedVoteToken,  // ← replace candidateId log
-          hasBlindingKey: !!votePayload.blindingKey,
-          hasBlindSignature: !!votePayload.blindSignature,
-          batchID: votePayload.batchID
+      const voteRes = await apiClient.post('/votes/submit', {
+        ballot: ballotPayload,
+        signature: signatureHex
       });
-
-      const voteRes = await apiClient.post('/votes', votePayload);
-
-      // 🔧 DEBUG: Log vote response
-      console.log('📦 Vote response:', voteRes.data);
 
       if (!voteRes.data.success) {
         throw new Error(voteRes.data.message || 'Vote submission failed');
@@ -290,41 +274,26 @@ export default function VotingDashboard() {
       console.log('✅ Vote cast successfully!');
 
       // ============================================
-      // STEP 5: Store verification token (one-time use!)
+      // STEP 6: Handle Post-Vote flow
       // ============================================
       const voteResponseData = voteRes.data.data || voteRes.data;
       
       if (voteResponseData.verificationToken) {
         setVerificationToken(voteResponseData.verificationToken);
-        
-        // Token expires in 2 minutes
         const expiryTime = Date.now() + (2 * 60 * 1000);
         setVerificationExpiry(expiryTime);
-        
-        console.log('🎫 Verification token received (2-min window):', 
-          voteResponseData.verificationToken.substring(0, 20) + '...');
       }
 
-      // ============================================
-      // STEP 6: Store vote ID and trigger receipt fetch
-      // ============================================
       setVoteID(generatedVoteID);
       setVoteSuccess(true);
-
-      // Start polling for receipt (receipt-free - no candidate info!)
       fetchReceipt(election.id, generatedVoteID);
 
     } catch (err) {
       console.error('❌ Vote failed:', err);
-      console.error('Error details:', {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status
-      });
       setError(err.response?.data?.message || err.message || 'Vote failed');
-      setIsRequestingSignature(false);
     } finally {
       setIsVoting(false);
+      setVotingStatus('');
     }
   };
 
@@ -453,7 +422,7 @@ export default function VotingDashboard() {
               {isVoting ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  {isRequestingSignature ? 'Requesting Signature...' : 'Casting Vote...'}
+                  {votingStatus || 'Casting Vote...'}
                 </>
               ) : (
                 <>
