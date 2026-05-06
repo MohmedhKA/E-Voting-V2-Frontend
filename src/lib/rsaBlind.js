@@ -116,7 +116,8 @@ export async function blindBallot(payload, nHex, eHex) {
   return {
     blindedMessageHex: blindedMessage.toString(16),
     r,
-    m
+    m,
+    messageHex: m.toString(16).padStart(64, '0')
   };
 }
 

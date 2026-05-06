@@ -241,10 +241,11 @@ export default function VotingDashboard() {
       });
 
       const signatureData = sigRes.data.data || sigRes.data;
-      const receivedBlindedSignatureHex = signatureData.blindedSignature || signatureData.blindSignature;
+      const receivedBlindedSignatureHex = 
+          signatureData.blindedSignature?.trim() || signatureData.blindSignature?.trim();
 
       if (!receivedBlindedSignatureHex) {
-        throw new Error('Backend error: Blind signature not returned');
+          throw new Error('Backend error: Blind signature not returned');
       }
       console.log('✅ Received blinded signature from EC');
 
