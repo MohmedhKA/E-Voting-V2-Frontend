@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import apiClient from '../api/client';
 import testingClient from '../api/testingClient';
+import MatrixBackground from '../components/MatrixBackground';
 
 function generateElectionWeights(count) {
   const baseProfiles = {
@@ -97,11 +98,11 @@ export default function Simulator() {
       .then((res) => {
         if (res.data.success) {
           setElections(res.data.data);
-          addLog('✅ Loaded active elections', 'success');
+          addLog('Elections loaded', 'success');
         }
       })
       .catch((err) => {
-        addLog(`❌ Failed to load elections: ${err.message}`, 'error');
+        addLog(`Failed to load elections: ${err.message}`, 'error');
       });
 
     return () => {
@@ -122,8 +123,7 @@ export default function Simulator() {
   
   const addLog = (msg, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString();
-    const emoji = { error: '❌', success: '✅', warning: '⚠️', info: 'ℹ️' }[type] || 'ℹ️';
-    setLogs(prev => [...prev, { msg: `[${timestamp}] ${emoji} ${msg}`, type }].slice(-150));
+    setLogs(prev => [...prev, { msg: `[${timestamp}] ${msg}`, type }].slice(-150));
   };
   
   const clearLogs = () => setLogs([]);
@@ -155,28 +155,21 @@ export default function Simulator() {
     clearLogs();
     startTimeRef.current = Date.now();
     
-    addLog('═══════════════════════════════════════', 'info');
-    addLog('🚀 PRODUCTION SIMULATION STARTING', 'success');
-    addLog('═══════════════════════════════════════', 'info');
-    addLog(`📊 Election: ${electionObj.title}`, 'info');
-    addLog(`📊 Total votes: ${voteCount}`, 'info');
-    addLog(`📊 Timeout: ${timeout}s`, 'info');
-    addLog(`📊 Candidates: ${candidates.length}`, 'info');
-    addLog('', 'info');
+    addLog('Simulation starting', 'success');
+    addLog(`Election: ${electionObj.title}`, 'info');
+    addLog(`Votes: ${voteCount}  |  Timeout: ${timeout}s  |  Candidates: ${candidates.length}`, 'info');
     
     try {
       const weights = generateElectionWeights(candidates.length);
       const candidateIds = buildWeightedCandidatePool(candidates, weights);
 
-      // Log the distribution so you can see it in terminal
-      addLog('📊 Vote distribution profile:', 'info');
+      addLog('Vote distribution:', 'info');
       candidates.forEach((c, i) => {
         const name = typeof c === 'string' ? `Candidate ${i + 1}` : (c.name || c.title || `Candidate ${i + 1}`);
-        addLog(`   ${name}: ~${(weights[i] * 100).toFixed(1)}%`, 'info');
+        addLog(`  ${name}: ~${(weights[i] * 100).toFixed(1)}%`, 'info');
       });
-      addLog('', 'info');
       
-      addLog('📤 Sending request to backend...', 'info');
+      addLog('Sending request to backend...', 'info');
       
       const startResponse = await testingClient.post('/simulate', {
         voteCount,
@@ -193,9 +186,8 @@ export default function Simulator() {
       }
       
       const { jobId } = startResponse.data;
-      addLog(`✅ Simulation started! Job: ${jobId.substring(0, 20)}...`, 'success');
-      addLog('⏳ Polling for live progress every 2s...', 'info');
-      addLog('', 'info');
+      addLog(`Job started: ${jobId.substring(0, 20)}...`, 'success');
+      addLog('Polling every 2s...', 'info');
       
       setCurrentPhase('confirming');
       
@@ -204,7 +196,7 @@ export default function Simulator() {
         if (stopRef.current) {
           clearInterval(pollingRef.current);
           pollingRef.current = null;
-          addLog('⏹️ Polling stopped by user', 'warning');
+          addLog('Polling stopped by user', 'warning');
           setIsRunning(false);
           setCurrentPhase('idle');
           return;
@@ -260,17 +252,9 @@ export default function Simulator() {
             
             setFinalMetrics(metrics);
             
-            addLog('', 'info');
-            addLog('═══════════════════════════════════════', 'info');
-            addLog('🏁 SIMULATION COMPLETE!', 'success');
-            addLog('═══════════════════════════════════════', 'info');
-            addLog(`   • Confirmed:    ${metrics.confirmed}`, 'success');
-            addLog(`   • Failed:       ${metrics.failed}`, metrics.failed > 0 ? 'error' : 'info');
-            addLog(`   • Pending:      ${metrics.pending}`, metrics.pending > 0 ? 'warning' : 'info');
-            addLog(`   • Success rate: ${metrics.successRate}%`, 'success');
-            addLog(`   • Throughput:   ${metrics.throughput} votes/sec`, 'success');
-            addLog(`   • Total time:   ${(metrics.totalTime / 1000).toFixed(2)}s`, 'info');
-            addLog('═══════════════════════════════════════', 'info');
+            addLog('Simulation complete', 'success');
+            addLog(`Confirmed: ${metrics.confirmed}  |  Failed: ${metrics.failed}  |  Pending: ${metrics.pending}`, 'info');
+            addLog(`Success rate: ${metrics.successRate}%  |  Throughput: ${metrics.throughput} v/s  |  Time: ${(metrics.totalTime / 1000).toFixed(2)}s`, 'success');
           }
           
         } catch (pollErr) {
@@ -295,7 +279,7 @@ export default function Simulator() {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
-    addLog('⏹️ Stopped polling (backend may still process)', 'warning');
+    addLog('Stopped polling (backend may still be processing)', 'warning');
     setIsRunning(false);
     setCurrentPhase('idle');
   };
@@ -310,7 +294,7 @@ export default function Simulator() {
     setCurrentPhase('idle');
     setLiveStats({ confirmed: 0, failed: 0, queued: 0 });
     clearLogs();
-    addLog('🔄 Simulation reset', 'info');
+    addLog('Simulation reset', 'info');
   };
   
   // ==========================================
@@ -319,7 +303,8 @@ export default function Simulator() {
   
   return (
     // KEY FIX: Use h-screen with overflow-hidden on root, then manage scroll per column
-    <div className="h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-green-400 font-mono flex flex-col overflow-hidden">
+    <div className="relative h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-green-400 font-mono flex flex-col overflow-hidden">
+      <MatrixBackground />
       
       {/* Header — fixed height */}
       <motion.div
@@ -375,11 +360,9 @@ export default function Simulator() {
                   <span className="text-sm font-bold text-purple-300 uppercase">Production Mode</span>
                 </div>
                 <p className="text-xs text-gray-400 leading-relaxed">
-                  ✅ Complete flow with:<br />
-                  • Dilithium-3 blind signatures<br />
-                  • PDC audit log writes<br />
-                  • Queue ingestion<br />
-                  • Blockchain confirmation tracking
+                  Complete flow with Dilithium-3 blind signatures,
+                  PDC audit log writes, queue ingestion, and
+                  blockchain confirmation tracking.
                 </p>
               </div>
               
@@ -494,14 +477,14 @@ export default function Simulator() {
                 className="absolute inset-y-0 left-0 bg-gradient-to-r from-green-600 via-green-500 to-cyan-500 shadow-lg"
               />
               <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white mix-blend-difference z-10">
-                {progress < 100 ? `${progress}% PROCESSING` : '✓ COMPLETE'}
+                {progress < 100 ? `${progress}% PROCESSING` : 'COMPLETE'}
               </div>
             </div>
             
             {isRunning && (
               <div className="mt-3 flex items-center gap-2 text-xs text-yellow-400">
                 <AlertCircle className="w-4 h-4 animate-pulse" />
-                Polling backend every 2s — no timeout risk 🎯
+                Polling backend every 2s
               </div>
             )}
           </motion.div>
@@ -554,13 +537,15 @@ export default function Simulator() {
                 <SummaryRow label="Still Pending"        value={finalMetrics.pending}     color={finalMetrics.pending > 0 ? 'yellow' : 'gray'} />
                 
                 {finalMetrics.timedOut && (
-                  <div className="mt-3 p-2 bg-yellow-900/20 border border-yellow-500/30 rounded text-xs text-yellow-400">
-                    ⚠️ Some votes timed out before confirmation
+                  <div className="mt-3 p-2 bg-yellow-900/20 border border-yellow-500/30 rounded text-xs text-yellow-400 flex items-center gap-2">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    Some votes timed out before confirmation
                   </div>
                 )}
                 {!finalMetrics.timedOut && (
-                  <div className="mt-3 p-2 bg-green-900/20 border border-green-500/30 rounded text-xs text-green-400">
-                    ✅ All votes processed successfully!
+                  <div className="mt-3 p-2 bg-green-900/20 border border-green-500/30 rounded text-xs text-green-400 flex items-center gap-2">
+                    <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    All votes processed successfully
                   </div>
                 )}
               </div>

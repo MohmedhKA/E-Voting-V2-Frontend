@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, BarChart2, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { X, BarChart2, Wifi, WifiOff, RefreshCw, Trophy, PauseCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import apiClient from '../api/client';
 
@@ -12,7 +12,7 @@ export default function ResultsModal({ isOpen, onClose, electionId }) {
 
   // Fetch results function
   const fetchResults = async () => {
-    console.log('📊 fetchResults called, electionId:', electionId);
+    console.log('fetchResults called, electionId:', electionId);
 
     if (!electionId) {
       setError('No election ID provided');
@@ -23,44 +23,30 @@ export default function ResultsModal({ isOpen, onClose, electionId }) {
     setError(null);
 
     try {
-      console.log('📡 Calling API: GET /votes/' + electionId);
       const res = await apiClient.get(`/votes/${electionId}`);
-      
-      console.log('✅ API Response:', res.data);
-      
+
       if (res.data.success) {
         // Parse response - handle multiple backend formats
         let candidateVotes = {};
-        
-        // 🔧 FIX: Check for nested results first!
+
         if (res.data.data?.results) {
-          // Format: { success, data: { electionId, results: { KVT: 1, DMK: 0 }, totalVotes } }
           candidateVotes = res.data.data.results;
         } else if (res.data.data?.candidateVotes) {
-          // Format: { success, data: { candidateVotes: { KVT: 1, DMK: 0 } } }
           candidateVotes = res.data.data.candidateVotes;
         } else if (res.data.candidateVotes) {
-          // Format: { success, candidateVotes: { KVT: 1, DMK: 0 } }
           candidateVotes = res.data.candidateVotes;
         } else if (res.data.results) {
-          // Format: { success, results: { KVT: 1, DMK: 0 } }
           candidateVotes = res.data.results;
         } else if (typeof res.data.data === 'object' && !res.data.data.electionId && !res.data.data.totalVotes) {
-          // Format: { success, data: { KVT: 1, DMK: 0 } } (direct votes object)
           candidateVotes = res.data.data;
         }
-        
-        console.log('📊 Parsed votes:', candidateVotes);
-        console.log('📊 Vote entries:', Object.entries(candidateVotes));
-        
+
         setResults(candidateVotes);
         setLastUpdated(new Date());
       } else {
         setError(res.data.message || 'Failed to fetch results');
       }
     } catch (err) {
-      console.error('❌ Fetch error:', err);
-      
       if (err.response?.status === 403) {
         setError('Access denied - Results endpoint requires authentication');
       } else if (err.response?.status === 404) {
@@ -75,9 +61,7 @@ export default function ResultsModal({ isOpen, onClose, electionId }) {
 
   // Initial fetch
   useEffect(() => {
-    console.log('🔵 useEffect [isOpen, electionId]:', { isOpen, electionId });
     if (isOpen && electionId) {
-      console.log('✅ Fetching results...');
       fetchResults();
     }
   }, [isOpen, electionId]);
@@ -142,17 +126,27 @@ export default function ResultsModal({ isOpen, onClose, electionId }) {
                   )}
                 </div>
               </div>
-              
+
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setIsAutoRefresh(!isAutoRefresh)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                     isAutoRefresh
                       ? 'bg-green-100 text-green-700 hover:bg-green-200'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
-                  {isAutoRefresh ? '🔄 Auto' : '⏸️ Paused'}
+                  {isAutoRefresh ? (
+                    <>
+                      <RefreshCw className="w-3 h-3" />
+                      Auto
+                    </>
+                  ) : (
+                    <>
+                      <PauseCircle className="w-3 h-3" />
+                      Paused
+                    </>
+                  )}
                 </button>
 
                 <button
@@ -199,7 +193,9 @@ export default function ResultsModal({ isOpen, onClose, electionId }) {
                         <div key={candidate} className="relative">
                           <div className="flex justify-between mb-2 font-semibold">
                             <span className="flex items-center gap-2">
-                              {index === 0 && totalVotes > 0 && <span>🏆</span>}
+                              {index === 0 && totalVotes > 0 && (
+                                <Trophy className="w-4 h-4 text-amber-500" />
+                              )}
                               {candidate}
                             </span>
                             <span>{count} Votes ({percentage}%)</span>
@@ -250,11 +246,17 @@ export default function ResultsModal({ isOpen, onClose, electionId }) {
 
             {/* Footer */}
             <div className="p-4 bg-gray-50 border-t border-gray-100">
-              <p className="text-xs text-gray-500 text-center">
+              <p className="text-xs text-gray-500 text-center flex items-center justify-center gap-1.5">
                 {isAutoRefresh ? (
-                  <>🔄 Auto-refreshing every 3 seconds</>
+                  <>
+                    <RefreshCw className="w-3 h-3" />
+                    Auto-refreshing every 3 seconds
+                  </>
                 ) : (
-                  <>⏸️ Auto-refresh paused</>
+                  <>
+                    <PauseCircle className="w-3 h-3" />
+                    Auto-refresh paused
+                  </>
                 )}
               </p>
             </div>
