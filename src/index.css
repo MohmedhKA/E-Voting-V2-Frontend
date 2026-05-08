@@ -12,7 +12,8 @@
   --color-india-green: #138808;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   height: 100%;
@@ -33,7 +34,8 @@ html, body {
 #root {
   height: 100%;
   background-image: url('/india-gate.jpg');
-  background-size: 120%; /* Zoom out by making it bigger (paradoxically, this shows more of the image) */
+  background-size: 120%;
+  /* Zoom out by making it bigger (paradoxically, this shows more of the image) */
   background-position: center;
   background-attachment: fixed;
   background-repeat: no-repeat;
@@ -49,4 +51,35 @@ html, body {
   -webkit-backdrop-filter: blur(16px);
   border-radius: 1rem;
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+/* ── Custom Scrollbar ── */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(16, 185, 129, 0.25) transparent;
+}
+
+/* WebKit (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.55);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }

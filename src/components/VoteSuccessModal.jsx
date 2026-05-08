@@ -8,14 +8,14 @@ import { X, CheckCircle, Clock, FileText, Shield, Copy, Home } from 'lucide-reac
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-export default function VoteSuccessModal({ 
-  isOpen, 
-  onClose, 
-  voteID, 
-  verificationToken, 
+export default function VoteSuccessModal({
+  isOpen,
+  onClose,
+  voteID,
+  verificationToken,
   verificationExpiry,
   receipt,
-  electionTitle 
+  electionTitle
 }) {
   const navigate = useNavigate();
   const [copiedToken, setCopiedToken] = useState(false);
@@ -44,10 +44,11 @@ export default function VoteSuccessModal({
         <>
           {/* Backdrop */}
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 backdrop-blur-md z-50"
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden pointer-events-auto max-h-[90vh] flex flex-col"
           />
 
           {/* Modal */}
@@ -57,14 +58,14 @@ export default function VoteSuccessModal({
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden pointer-events-auto max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden pointer-events-auto max-h-[90vh] flex flex-col"
             >
               {/* 🎉 Success Header with Confetti Effect */}
-              <div className="relative bg-gradient-to-br from-green-500 via-green-600 to-emerald-600 p-8 text-white overflow-hidden">
+              <div className="relative bg-gradient-to-br from-green-500 via-green-600 to-emerald-600 p-8 text-white overflow-hidden flex-shrink-0">
                 {/* Animated Background Circles */}
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32"></div>
                 <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full translate-y-24 -translate-x-24"></div>
-                
+
                 {/* Content */}
                 <div className="relative z-10 text-center">
                   <motion.div
@@ -75,7 +76,7 @@ export default function VoteSuccessModal({
                   >
                     <CheckCircle className="w-14 h-14 text-white" strokeWidth={3} />
                   </motion.div>
-                  
+
                   <motion.h2
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -84,7 +85,7 @@ export default function VoteSuccessModal({
                   >
                     Vote Cast Successfully! 🎉
                   </motion.h2>
-                  
+
                   <motion.p
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -93,7 +94,7 @@ export default function VoteSuccessModal({
                   >
                     Your vote has been recorded on the blockchain
                   </motion.p>
-                  
+
                   {electionTitle && (
                     <motion.div
                       initial={{ opacity: 0 }}
@@ -107,12 +108,14 @@ export default function VoteSuccessModal({
                 </div>
               </div>
 
+              {/* Scrollable body */}
+              <div className="overflow-y-auto flex-1">
               {/* Content */}
               <div className="p-8 space-y-6">
                 {/* Info Banner */}
                 <div className="bg-blue-50 border-l-4 border-blue-500 rounded-lg p-4">
                   <p className="text-sm text-blue-800">
-                    <strong>📝 Important:</strong> Save both values below. The token shows your choice (2-min only), 
+                    <strong>📝 Important:</strong> Save both values below. The token shows your choice (2-min only),
                     the Vote ID verifies blockchain confirmation (permanent).
                   </p>
                 </div>
@@ -139,7 +142,7 @@ export default function VoteSuccessModal({
                         <p className="text-sm text-orange-700 mb-3">
                           Use this to verify your candidate choice. Valid for 2 minutes. Single use only!
                         </p>
-                        
+
                         {/* Token Display */}
                         <div className="bg-white rounded-xl p-4 border-2 border-orange-200 shadow-inner">
                           <p className="text-xs text-gray-500 mb-2 font-semibold">Token:</p>
@@ -201,7 +204,7 @@ export default function VoteSuccessModal({
                       <p className="text-sm text-blue-700 mb-3">
                         Use this to verify your vote on blockchain. Valid forever. Does NOT show candidate choice.
                       </p>
-                      
+
                       {/* Vote ID Display */}
                       <div className="bg-white rounded-xl p-4 border-2 border-blue-200 shadow-inner">
                         <p className="text-xs text-gray-500 mb-2 font-semibold">Vote ID:</p>
@@ -288,6 +291,8 @@ export default function VoteSuccessModal({
                   <Home className="w-5 h-5" />
                   Back to Home
                 </button>
+              </div>
+              {/* End scrollable body */}
               </div>
             </motion.div>
           </div>
