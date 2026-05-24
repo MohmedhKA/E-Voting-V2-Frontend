@@ -3,6 +3,7 @@ import VoterLogin from './pages/VoterLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import VotingDashboard from './pages/VotingDashboard';
 import Simulator from './pages/Simulator';
+import BatchSimulator from './pages/BatchSimulator';
 import VerifyVote from './pages/VerifyVote';
 
 function App() {
@@ -27,6 +28,7 @@ function App() {
           <Route path="/vote" element={<VotingDashboard />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/simulate" element={<Simulator />} />
+          <Route path="/batch-simulate" element={<BatchSimulator />} />
           <Route path="/verify" element={<VerifyVote />} />
         </Routes>
       </div>
