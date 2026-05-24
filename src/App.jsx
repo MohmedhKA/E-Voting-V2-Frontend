@@ -28,7 +28,7 @@ function App() {
           <Route path="/vote" element={<VotingDashboard />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/simulate" element={<Simulator />} />
-          <Route path="/batch-simulate" element={<BatchSimulator />} />
+          <Route path="/ResearchSim" element={<BatchSimulator />} />
           <Route path="/verify" element={<VerifyVote />} />
         </Routes>
       </div>

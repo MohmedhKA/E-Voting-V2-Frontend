@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Zap, Terminal, Play, StopCircle, TrendingUp, Clock, 
   Database, CheckCircle, XCircle, Activity, Cpu, Timer,
-  BarChart3, Shield, Gauge, AlertCircle, Layers
+  BarChart3, Shield, Gauge, AlertCircle, Layers, Download
 } from 'lucide-react';
 import apiClient from '../api/client';
 import testingClient from '../api/testingClient';
@@ -336,6 +336,45 @@ export default function BatchSimulator() {
     }, 100); // small delay to let current loops exit
   };
 
+  const downloadCSV = () => {
+    if (allResults.length === 0) return;
+    const reps = Math.max(...allResults.map(r => r.rep));
+    const batches = Math.max(...allResults.map(r => r.batchIndex));
+
+    let csvContent = "data:text/csv;charset=utf-8,";
+    let header = ["Batch Votes"];
+    for (let i = 1; i <= reps; i++) {
+      header.push(`Rep ${i} TPS`);
+    }
+    header.push("Avg TPS");
+    csvContent += header.join(",") + "\n";
+
+    for (let b = 1; b <= batches; b++) {
+      const batchResults = allResults.filter(r => r.batchIndex === b);
+      if (batchResults.length === 0) continue;
+      const voteCount = batchResults[0].voteCount;
+      let row = [voteCount];
+      let sumTPS = 0;
+      for (let r = 1; r <= reps; r++) {
+        const res = batchResults.find(res => res.rep === r);
+        const tps = res ? res.metrics.throughput : "";
+        row.push(tps);
+        if (res) sumTPS += Number(tps);
+      }
+      const avgTPS = (sumTPS / batchResults.length).toFixed(2);
+      row.push(avgTPS);
+      csvContent += row.join(",") + "\n";
+    }
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "tps_results.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="relative h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-green-400 font-mono flex flex-col overflow-hidden">
       <MatrixBackground />
@@ -569,29 +608,52 @@ export default function BatchSimulator() {
               animate={{ opacity: 1, y: 0 }}
               className="border border-purple-500/30 rounded-xl p-4 bg-gray-900/50 backdrop-blur-sm"
             >
-               <div className="flex items-center gap-2 mb-3">
-                <BarChart3 className="w-4 h-4 text-purple-500" />
-                <h3 className="text-xs font-bold uppercase text-purple-400">Completed Runs</h3>
-              </div>
-              <div className="max-h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-purple-900 pr-1">
-                <table className="w-full text-xs text-left">
-                  <thead className="text-gray-500 border-b border-gray-800 sticky top-0 bg-gray-900">
+               <div className="flex items-center justify-between mb-3">
+                 <div className="flex items-center gap-2">
+                   <BarChart3 className="w-4 h-4 text-purple-500" />
+                   <h3 className="text-xs font-bold uppercase text-purple-400">Completed Runs</h3>
+                 </div>
+                 {currentPhase === 'complete' && (
+                   <button onClick={downloadCSV} className="flex items-center gap-1 text-xs bg-purple-600/20 text-purple-300 px-2 py-1 rounded border border-purple-500/30 hover:bg-purple-600/40 transition-colors">
+                     <Download className="w-3 h-3" />
+                     Download CSV
+                   </button>
+                 )}
+               </div>
+              <div className="max-h-[250px] overflow-y-auto scrollbar-thin scrollbar-thumb-purple-900 pr-1">
+                <table className="w-full text-xs text-center border-collapse">
+                  <thead className="text-gray-400 bg-gray-800/80 sticky top-0">
                     <tr>
-                      <th className="py-1">Run</th>
-                      <th>Votes</th>
-                      <th>TP (v/s)</th>
-                      <th>Success</th>
+                      <th className="py-2 px-2 border border-gray-700">Batch Votes</th>
+                      {Array.from({length: repeatCount}).map((_, i) => (
+                        <th key={i} className="py-2 px-2 border border-gray-700">Rep {i + 1} (TPS)</th>
+                      ))}
+                      <th className="py-2 px-2 border border-gray-700">Avg TPS</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {allResults.map((res, idx) => (
-                      <tr key={idx} className="border-b border-gray-800/50 text-gray-300">
-                         <td className="py-1">R{res.rep}-B{res.batchIndex}</td>
-                         <td>{res.voteCount}</td>
-                         <td className="text-cyan-400">{res.metrics.throughput}</td>
-                         <td className={res.metrics.successRate === 100 ? 'text-green-400' : 'text-yellow-400'}>{res.metrics.successRate}%</td>
-                      </tr>
-                    ))}
+                    {Array.from({length: batchCount}).map((_, b) => {
+                      const bIdx = b + 1;
+                      const batchResults = allResults.filter(r => r.batchIndex === bIdx);
+                      if (batchResults.length === 0) return null;
+                      const voteCount = batchResults[0].voteCount;
+                      let sumTPS = 0;
+                      return (
+                        <tr key={bIdx} className="border-b border-gray-800 hover:bg-gray-800/30 text-gray-300 transition-colors">
+                          <td className="py-2 px-2 border border-gray-800">{voteCount}</td>
+                          {Array.from({length: repeatCount}).map((_, r) => {
+                            const rIdx = r + 1;
+                            const res = batchResults.find(res => res.rep === rIdx);
+                            const tps = res ? res.metrics.throughput : '-';
+                            if (res) sumTPS += Number(tps);
+                            return <td key={rIdx} className="py-2 px-2 border border-gray-800 text-cyan-400">{tps}</td>;
+                          })}
+                          <td className="py-2 px-2 border border-gray-800 font-bold text-green-400">
+                            {(sumTPS / batchResults.length).toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
