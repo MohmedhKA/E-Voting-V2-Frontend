@@ -255,17 +255,17 @@ export default function BatchSimulator() {
     const newAllResults = [];
 
     try {
-      for (let rep = 1; rep <= repeatCount; rep++) {
-        setCurrentRep(rep);
-        addLog(`--- Starting Repetition ${rep}/${repeatCount} ---`, 'info');
+      for (let bIdx = 0; bIdx < batchCount; bIdx++) {
+        setCurrentBatchIdx(bIdx + 1);
+        const currentVoteCount = batchVotes[bIdx];
+        addLog(`--- Starting Batch ${bIdx + 1}/${batchCount} (${currentVoteCount} votes) ---`, 'info');
         
-        for (let bIdx = 0; bIdx < batchCount; bIdx++) {
-          setCurrentBatchIdx(bIdx + 1);
-          const currentVoteCount = batchVotes[bIdx];
+        for (let rep = 1; rep <= repeatCount; rep++) {
+          setCurrentRep(rep);
           
           if (stopRef.current) throw new Error('Stopped by user');
 
-          addLog(`=> Running Batch ${bIdx + 1}/${batchCount} (${currentVoteCount} votes)`, 'info');
+          addLog(`=> Running Repetition ${rep}/${repeatCount} for ${currentVoteCount} votes`, 'info');
           
           setProgress(0);
           setLiveStats({ confirmed: 0, failed: 0, queued: 0 });
@@ -278,7 +278,7 @@ export default function BatchSimulator() {
           newAllResults.push({ rep, batchIndex: bIdx + 1, voteCount: currentVoteCount, metrics });
           setAllResults([...newAllResults]);
 
-          addLog(`Batch complete. Throughput: ${metrics.throughput} v/s | Confirmed: ${metrics.confirmed}`, 'success');
+          addLog(`Run complete. Throughput: ${metrics.throughput} v/s | Confirmed: ${metrics.confirmed}`, 'success');
 
           // Wait before next if not the very last step
           if (!(rep === repeatCount && bIdx === batchCount - 1)) {
@@ -300,6 +300,7 @@ export default function BatchSimulator() {
 
       addLog('All batch simulations complete!', 'success');
       setCurrentPhase('complete');
+      downloadCSV(newAllResults);
       
     } catch (err) {
       if (err.message === 'Stopped by user') {
@@ -336,10 +337,10 @@ export default function BatchSimulator() {
     }, 100); // small delay to let current loops exit
   };
 
-  const downloadCSV = () => {
-    if (allResults.length === 0) return;
-    const reps = Math.max(...allResults.map(r => r.rep));
-    const batches = Math.max(...allResults.map(r => r.batchIndex));
+  const downloadCSV = (resultsToUse = allResults) => {
+    if (resultsToUse.length === 0) return;
+    const reps = Math.max(...resultsToUse.map(r => r.rep));
+    const batches = Math.max(...resultsToUse.map(r => r.batchIndex));
 
     let csvContent = "data:text/csv;charset=utf-8,";
     let header = ["Batch Votes"];
@@ -350,7 +351,7 @@ export default function BatchSimulator() {
     csvContent += header.join(",") + "\n";
 
     for (let b = 1; b <= batches; b++) {
-      const batchResults = allResults.filter(r => r.batchIndex === b);
+      const batchResults = resultsToUse.filter(r => r.batchIndex === b);
       if (batchResults.length === 0) continue;
       const voteCount = batchResults[0].voteCount;
       let row = [voteCount];
