@@ -255,17 +255,17 @@ export default function BatchSimulator() {
     const newAllResults = [];
 
     try {
-      for (let bIdx = 0; bIdx < batchCount; bIdx++) {
-        setCurrentBatchIdx(bIdx + 1);
-        const currentVoteCount = batchVotes[bIdx];
-        addLog(`--- Starting Batch ${bIdx + 1}/${batchCount} (${currentVoteCount} votes) ---`, 'info');
+      for (let rep = 1; rep <= repeatCount; rep++) {
+        setCurrentRep(rep);
+        addLog(`--- Starting Repetition ${rep}/${repeatCount} ---`, 'info');
         
-        for (let rep = 1; rep <= repeatCount; rep++) {
-          setCurrentRep(rep);
+        for (let bIdx = 0; bIdx < batchCount; bIdx++) {
+          setCurrentBatchIdx(bIdx + 1);
+          const currentVoteCount = batchVotes[bIdx];
           
           if (stopRef.current) throw new Error('Stopped by user');
 
-          addLog(`=> Running Repetition ${rep}/${repeatCount} for ${currentVoteCount} votes`, 'info');
+          addLog(`=> Running Batch ${bIdx + 1}/${batchCount} (${currentVoteCount} votes)`, 'info');
           
           setProgress(0);
           setLiveStats({ confirmed: 0, failed: 0, queued: 0 });
@@ -278,7 +278,7 @@ export default function BatchSimulator() {
           newAllResults.push({ rep, batchIndex: bIdx + 1, voteCount: currentVoteCount, metrics });
           setAllResults([...newAllResults]);
 
-          addLog(`Run complete. Throughput: ${metrics.throughput} v/s | Confirmed: ${metrics.confirmed}`, 'success');
+          addLog(`Batch complete. Throughput: ${metrics.throughput} v/s | Confirmed: ${metrics.confirmed}`, 'success');
 
           // Wait before next if not the very last step
           if (!(rep === repeatCount && bIdx === batchCount - 1)) {
