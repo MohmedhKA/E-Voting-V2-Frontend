@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, PlayCircle, BarChart2, Trash2, ShieldCheck, Terminal, Settings, Activity, LogOut } from 'lucide-react';
+import { Plus, PlayCircle, BarChart2, Trash2, ShieldCheck, Terminal, Settings, Activity, LogOut, XCircle } from 'lucide-react';
 import adminClient from '../api/adminClient';
 import ResultsModal from '../components/ResultsModal';
 
@@ -69,6 +69,24 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error(err);
       appendLog(`❌ Fetch results failed: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  // Ends the election on-chain AND destroys the ephemeral RSA keypair for this election.
+  // HNDL mitigation: once ended, the key is gone and cannot be used to retroactively
+  // decrypt or forge ballots captured during the election.
+  const handleEndElection = async () => {
+    if (!window.confirm(`End election "${electionId}"? This will destroy its RSA keypair and cannot be undone.`)) return;
+    try {
+      setIsBusy(true);
+      appendLog(`Ending election ${electionId} and destroying ephemeral keypair...`);
+      const res = await adminClient.patch(`/elections/${electionId}/end`);
+      appendLog(`✅ Ended: ${res.data.message || 'Election ended. RSA keypair destroyed.'}`);
+    } catch (err) {
+      console.error(err);
+      appendLog(`❌ End election failed: ${err.response?.data?.error || err.message}`);
     } finally {
       setIsBusy(false);
     }
@@ -227,7 +245,7 @@ export default function AdminDashboard() {
             </motion.div>
 
             {/* Action Bar */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <button
                 onClick={handleCreateElection}
                 disabled={isBusy}
@@ -253,6 +271,16 @@ export default function AdminDashboard() {
               >
                 <BarChart2 className="w-6 h-6 text-blue-500" />
                 View Results
+              </button>
+
+              {/* Destructive: ends election + destroys ephemeral RSA keypair (HNDL mitigation) */}
+              <button
+                onClick={handleEndElection}
+                disabled={isBusy}
+                className="bg-white border border-red-200 text-red-600 py-4 rounded-xl font-bold shadow-sm hover:shadow-md hover:bg-red-50 transition-all flex flex-col items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <XCircle className="w-6 h-6 text-red-500" />
+                End Election
               </button>
             </div>
 

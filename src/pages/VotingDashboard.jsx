@@ -215,12 +215,20 @@ export default function VotingDashboard() {
 
       setVotingStatus('Preparing secure ballot...');
 
-      // Get EC Public Key
-      const pubKeyRes = await apiClient.get('/ec/public-key');
+      // Get election-scoped ephemeral RSA public key (HNDL mitigation).
+      // Each election has an independent RSA-2048 keypair — must pass electionId.
+      const pubKeyRes = await apiClient.get(`/ec/public-key?electionId=${election.id}`);
       const pubKeyData = pubKeyRes.data.data || pubKeyRes.data;
-      const { n, e } = pubKeyData;
+      const { n, e, electionId: returnedElectionId } = pubKeyData;
 
-      if (!n || !e) throw new Error("Failed to retrieve EC public key");
+      if (!n || !e) throw new Error('Failed to retrieve EC public key');
+
+      // Safety assertion: ensure the key returned is for THIS election, not a stale cached one.
+      if (returnedElectionId && returnedElectionId !== election.id) {
+        throw new Error(
+          `Public key election mismatch: expected ${election.id}, got ${returnedElectionId}`
+        );
+      }
 
       // ============================================
       // STEP 2: Create true mathematically blinded ballot
