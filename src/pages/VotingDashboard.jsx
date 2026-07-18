@@ -298,6 +298,15 @@ export default function VotingDashboard() {
 
       console.log('✅ Vote cast successfully!');
 
+      // Clear the pending RPV session since the vote is committed safely
+      try {
+        await apiClient.post('/ec/clear-pending');
+        console.log('🧹 Pending recovery session cleared successfully.');
+      } catch (clearErr) {
+        console.warn('⚠️ Non-fatal: Failed to clear pending session:', clearErr);
+      }
+
+
       // ============================================
       // STEP 6: Handle Post-Vote flow
       // ============================================
