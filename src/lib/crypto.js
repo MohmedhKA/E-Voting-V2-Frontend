@@ -120,3 +120,48 @@ export function createBlindedVote(electionId, candidateId) {
 export function generateBatchID() {
   return `BATCH_${Math.floor(Date.now() / 60000)}`;
 }
+
+/**
+ * Computes the terminal-scoped HMAC-SHA256 tag over the vote payload in the browser.
+ * Uses the Web Crypto API.
+ * 
+ * @param {string} electionId
+ * @param {string} candidateId
+ * @param {string} voteID
+ * @param {string} blindSignature
+ * @param {string} terminalKeyHex
+ * @returns {Promise<string>} Hex-encoded HMAC-SHA256 tag
+ */
+export async function generateHmacTag(electionId, candidateId, voteID, blindSignature, terminalKeyHex) {
+  const payload = `${electionId}:${candidateId}:${voteID}:${blindSignature}`;
+  
+  // Convert hex terminal key to Uint8Array
+  const secretBytes = new Uint8Array(
+    terminalKeyHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
+  );
+  
+  // Import key into SubtleCrypto
+  const key = await window.crypto.subtle.importKey(
+    "raw",
+    secretBytes,
+    { name: "HMAC", hash: { name: "SHA-256" } },
+    false,
+    ["sign"]
+  );
+  
+  // Encode payload message
+  const enc = new TextEncoder();
+  const messageBytes = enc.encode(payload);
+  
+  // Sign message
+  const signatureBuffer = await window.crypto.subtle.sign(
+    "HMAC",
+    key,
+    messageBytes
+  );
+  
+  // Convert signature buffer to hex
+  const hashArray = Array.from(new Uint8Array(signatureBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+

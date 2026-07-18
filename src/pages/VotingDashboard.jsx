@@ -18,8 +18,9 @@ import {
 } from 'lucide-react';
 import apiClient from '../api/client';
 import VoteSuccessModal from '../components/VoteSuccessModal';
-import { generateVoteID, generateNonce, generateBatchID } from '../lib/crypto';
+import { generateVoteID, generateNonce, generateBatchID, generateHmacTag } from '../lib/crypto';
 import { blindBallot, unblind } from '../lib/rsaBlind';
+
 
 // Helper to get random color for candidates based on index
 const getCandidateColor = (index) => {
@@ -271,13 +272,25 @@ export default function VotingDashboard() {
       setVotingStatus('Submitting vote...');
       console.log('📮 Casting anonymous vote with valid unblinded signature...');
 
+      // Derive terminal-scoped HMAC tag for the vote payload
+      const terminalKeyHex = import.meta.env.VITE_TERMINAL_KEY || '472323deb05e39452b10c724489e5923fb1dc077ee881efbbd341a623382cde8';
+      const hmacTag = await generateHmacTag(
+        election.id,
+        selectedCandidate,
+        generatedVoteID,
+        signatureHex,
+        terminalKeyHex
+      );
+
       const voteRes = await apiClient.post('/votes/submit', {
         voteID: generatedVoteID,
         electionId: election.id,
         candidateId: selectedCandidate,
         blindSignature: signatureHex,
-        batchID: batchID
+        batchID: batchID,
+        hmacTag: hmacTag
       });
+
 
       if (!voteRes.data.success) {
         throw new Error(voteRes.data.message || 'Vote submission failed');

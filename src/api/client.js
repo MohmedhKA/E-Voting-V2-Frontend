@@ -42,7 +42,9 @@ apiClient.interceptors.request.use(
     // Check if JWT token exists in session storage
     const authToken = sessionStorage.getItem('authToken');
     
-    if (authToken) {
+    // HNDL & Privacy: Do NOT send the Authorization header on the /votes/submit path.
+    // This ensures that the voter's identity JWT is completely omitted from the anonymous vote submission.
+    if (authToken && !config.url.endsWith('/votes/submit')) {
       // Add Authorization header with Bearer token
       config.headers['Authorization'] = `Bearer ${authToken}`;
       
