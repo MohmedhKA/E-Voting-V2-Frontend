@@ -205,10 +205,43 @@ export default function VotingDashboard() {
         batchID
       });
 
+      // Determine candidate index for LWE one-hot vector encoding
+      let candidateIndex = 0;
+      if (Array.isArray(election.candidates)) {
+        const idx = election.candidates.findIndex(c =>
+          (typeof c === 'string' ? c : (c.id || c.name)) === selectedCandidate
+        );
+        if (idx >= 0) candidateIndex = idx;
+      }
+      const numCandidates = (election.candidates && election.candidates.length) || 2;
+
+      setVotingStatus('Generating post-quantum ballot envelope...');
+
+      // ============================================
+      // STEP 1.5: Generate PQ Ballot Envelope (Pedersen Commitment + LWE + Sigma Proof)
+      // ============================================
+      let envelope = null;
+      try {
+        const envRes = await apiClient.post('/votes/prepare-envelope', {
+          electionId: election.id,
+          candidateIndex,
+          numCandidates
+        });
+        if (envRes.data.success && envRes.data.data) {
+          envelope = envRes.data.data;
+          console.log('🛡️ Post-quantum ballot envelope generated:', {
+            commitPq: envelope.commitPqHex?.substring(0, 16) + '...'
+          });
+        }
+      } catch (envErr) {
+        console.warn('⚠️ Could not generate PQ envelope via microservice, using standard path:', envErr);
+      }
+
       const ballotPayload = {
         voteID: generatedVoteID,
         electionId: election.id,
         candidateId: selectedCandidate,
+        commitPq: envelope?.commitPqHex || '',
         nonce,
         batchID,
         timestamp: Date.now()
@@ -267,16 +300,17 @@ export default function VotingDashboard() {
       // r variable will be automatically garbage collected here
 
       // ============================================
-      // STEP 5: Cast unblinded vote (ANONYMOUS!)
+      // STEP 5: Cast unblinded vote (ANONYMOUS & EVERLASTING PRIVACY!)
       // ============================================
       setVotingStatus('Submitting vote...');
       console.log('📮 Casting anonymous vote with valid unblinded signature...');
 
       // Derive terminal-scoped HMAC tag for the vote payload
       const terminalKeyHex = import.meta.env.VITE_TERMINAL_KEY || '472323deb05e39452b10c724489e5923fb1dc077ee881efbbd341a623382cde8';
+      const hmacTarget = envelope?.commitPqHex || selectedCandidate;
       const hmacTag = await generateHmacTag(
         election.id,
-        selectedCandidate,
+        hmacTarget,
         generatedVoteID,
         signatureHex,
         terminalKeyHex
@@ -286,11 +320,15 @@ export default function VotingDashboard() {
         voteID: generatedVoteID,
         electionId: election.id,
         candidateId: selectedCandidate,
+        commitPq: envelope?.commitPqHex || '',
+        cencPq: envelope?.cencPqHex || '',
+        proofHex: envelope?.proofHex || '',
+        electionPublicKeyHex: envelope?.electionPublicKeyHex || '',
+        numCandidates: String(numCandidates),
         blindSignature: signatureHex,
         batchID: batchID,
         hmacTag: hmacTag
       });
-
 
       if (!voteRes.data.success) {
         throw new Error(voteRes.data.message || 'Vote submission failed');

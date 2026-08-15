@@ -60,12 +60,30 @@ export default function VoterLogin() {
   useEffect(() => {
     const fetchElections = async () => {
       try {
-        const res = await apiClient.get('/elections/active');
-        if (res.data.success) {
-          setElections(res.data.data);
-          if (res.data.data.length > 0) {
-            setSelectedElection(res.data.data[0]);
+        let electionsList = [];
+        try {
+          const res = await apiClient.get('/elections');
+          if (res.data.success && res.data.data) {
+            const data = res.data.data;
+            if (Array.isArray(data)) {
+              electionsList = data;
+            } else if (data.active || data.ended) {
+              const active = (data.active || []).map(e => ({ ...e, status: e.status || 'ACTIVE' }));
+              const ended = (data.ended || []).map(e => ({ ...e, status: e.status || 'ENDED' }));
+              electionsList = [...active, ...ended];
+            }
           }
+        } catch (e) {
+          // Fallback to /elections/active
+          const activeRes = await apiClient.get('/elections/active');
+          if (activeRes.data.success) {
+            electionsList = (activeRes.data.data || []).map(e => ({ ...e, status: 'ACTIVE' }));
+          }
+        }
+
+        setElections(electionsList);
+        if (electionsList.length > 0) {
+          setSelectedElection(electionsList[0]);
         }
       } catch (err) {
         console.error('Failed to fetch elections:', err);
@@ -601,21 +619,44 @@ export default function VoterLogin() {
                               setSelectedElection(election);
                               setIsDropdownOpen(false);
                             }}
-                            className="px-4 py-3 hover:bg-orange-50 cursor-pointer flex flex-col"
+                            className="px-4 py-3 hover:bg-orange-50 cursor-pointer flex flex-col transition"
                           >
-                            <span className="font-bold text-gray-800">{election.title}</span>
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-gray-800">{election.title}</span>
+                              {election.status === 'ENDED' ? (
+                                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-gray-200 text-gray-700">Ended</span>
+                              ) : (
+                                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">Active</span>
+                              )}
+                            </div>
                             <span className="text-xs text-gray-500">ID: {election.id}</span>
                           </div>
                         ))}
                         {elections.length === 0 && (
-                          <div className="p-4 text-center text-gray-500 text-sm">No active elections</div>
+                          <div className="p-4 text-center text-gray-500 text-sm">No elections available</div>
                         )}
                       </motion.div>
                     )}
                   </AnimatePresence>
                 </div>
 
-                {/* Login Form */}
+                {/* Conditional Render: Ended Election Notice vs Active Login Form */}
+                {selectedElection?.status === 'ENDED' ? (
+                  <div className="p-6 bg-orange-50 border border-orange-200 rounded-2xl text-center space-y-4 shadow-sm">
+                    <div className="text-orange-900 font-bold text-lg">Election Concluded</div>
+                    <p className="text-sm text-gray-600 leading-relaxed">
+                      Voting for <strong className="text-gray-900">{selectedElection.title}</strong> is now closed. The final cryptographic tally has been recorded on the Hyperledger Fabric blockchain.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleShowResults}
+                      className="w-full flex items-center justify-center gap-2 bg-orange-600 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-orange-600/30 hover:bg-orange-700 transition active:scale-95"
+                    >
+                      <BarChart2 className="w-5 h-5" />
+                      View Final Verified Results
+                    </button>
+                  </div>
+                ) : (
                 <form onSubmit={handleVerifyIdentity} className="space-y-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Aadhaar Number</label>
@@ -674,6 +715,7 @@ export default function VoterLogin() {
                     )}
                   </button>
                 </form>
+                )}
               </>
             ) : (
               <>

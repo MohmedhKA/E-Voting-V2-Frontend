@@ -97,7 +97,9 @@ export async function blindBallot(payload, nHex, eHex) {
   const n = BigInt('0x' + nHex);
   const e = BigInt('0x' + eHex);
   
-  const message = `${payload.electionId}:${payload.candidateId}:${payload.voteID}`;
+  // Everlasting privacy binding: SHA-256("EVOTE-v1:" || electionId || voteID || commitPq)
+  const commitComponent = payload.commitPq || payload.candidateId || '';
+  const message = `EVOTE-v1:${payload.electionId}:${payload.voteID}:${commitComponent}`;
   const m = await sha256ToBigInt(message);
   
   let r;
@@ -113,8 +115,11 @@ export async function blindBallot(payload, nHex, eHex) {
   const rPowE = modPow(r, e, n);
   const blindedMessage = (m * rPowE) % n;
   
+  // Pad to 512 hex characters (256 bytes) for OpenSSL RSA_NO_PADDING
+  const blindedMessageHex = blindedMessage.toString(16).padStart(512, '0');
+
   return {
-    blindedMessageHex: blindedMessage.toString(16),
+    blindedMessageHex,
     r,
     m,
     messageHex: m.toString(16).padStart(64, '0')
