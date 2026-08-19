@@ -70,11 +70,14 @@ apiClient.interceptors.request.use(
  */
 apiClient.interceptors.response.use(
   (response) => {
-    // Pass through successful responses
+    // Notify connectivity listeners that backend is online
+    window.dispatchEvent(new CustomEvent('backend-online'));
     return response;
   },
   (error) => {
     if (error.response) {
+      // Backend responded, so server is up
+      window.dispatchEvent(new CustomEvent('backend-online'));
       const status = error.response.status;
       
       if (status === 401) {
@@ -84,9 +87,6 @@ apiClient.interceptors.response.use(
         // Clear expired token
         sessionStorage.removeItem('authToken');
         sessionStorage.removeItem('sessionID');
-        
-        // Optionally redirect to login (uncomment if needed)
-        // window.location.href = '/';
       } else if (status === 403) {
         // API key or terminal issue
         console.error('🚨 Access forbidden - Check API key and terminal ID');
@@ -95,9 +95,10 @@ apiClient.interceptors.response.use(
         console.error('🚨 Server error:', error.response.data.message);
       }
     } else if (error.request) {
-      // Request made but no response (network error)
+      // Request made but no response (network error / server down)
       console.error('🚨 Network error - Cannot reach backend');
       console.error('Backend URL:', API_BASE_URL);
+      window.dispatchEvent(new CustomEvent('backend-offline'));
     } else {
       // Something else happened
       console.error('🚨 Request error:', error.message);

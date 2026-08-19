@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Lock, Fingerprint, ArrowRight, ChevronDown, BarChart2, 
-  Loader2, UserCheck, MapPin, Search, Mail, Clock, RefreshCw 
+  Loader2, UserCheck, MapPin, Search, Mail, Clock, RefreshCw, ShieldCheck 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import apiClient from '../api/client';
@@ -34,9 +34,7 @@ export default function VoterLogin() {
   const [isResendingOTP, setIsResendingOTP] = useState(false);
   const [isSendingOTP, setIsSendingOTP] = useState(false);
 
-  // 🆕 NEW: Session State (for JWT authentication)
-  const [sessionID, setSessionID] = useState(null);
-  const [authToken, setAuthToken] = useState(null);
+  // Session State (for JWT authentication)
   const [isCreatingSession, setIsCreatingSession] = useState(false);
 
   // Election State
@@ -44,15 +42,9 @@ export default function VoterLogin() {
   const [selectedElection, setSelectedElection] = useState(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   
-  // Results Modal State
+  // Results & Verify Modal State
   const [showResults, setShowResults] = useState(false);
-  const [resultsData, setResultsData] = useState(null);
-  const [isLoadingResults, setIsLoadingResults] = useState(false);
   const [showVerifyModal, setShowVerifyModal] = useState(false);
-  const [verifyTxId, setVerifyTxId] = useState('');
-  const [verifying, setVerifying] = useState(false);
-  const [verifyResult, setVerifyResult] = useState(null);
-  const [verifyError, setVerifyError] = useState('');
 
   // ============================================
   // 1. Fetch Elections on Mount
@@ -60,30 +52,21 @@ export default function VoterLogin() {
   useEffect(() => {
     const fetchElections = async () => {
       try {
-        let electionsList = [];
-        try {
-          const res = await apiClient.get('/elections');
-          if (res.data.success && res.data.data) {
-            const data = res.data.data;
-            if (Array.isArray(data)) {
-              electionsList = data;
-            } else if (data.active || data.ended) {
-              const active = (data.active || []).map(e => ({ ...e, status: e.status || 'ACTIVE' }));
-              const ended = (data.ended || []).map(e => ({ ...e, status: e.status || 'ENDED' }));
-              electionsList = [...active, ...ended];
-            }
+        const res = await apiClient.get('/elections/active');
+        if (res.data.success && Array.isArray(res.data.data)) {
+          // Deduplicate by ID and ensure active status
+          const map = new Map();
+          res.data.data.forEach(e => {
+            const id = e.id || e._id;
+            if (id && !map.has(id)) map.set(id, e);
+          });
+          const activeList = Array.from(map.values()).filter(e => e.status === 'ACTIVE' || !e.status);
+          setElections(activeList);
+          if (activeList.length > 0) {
+            setSelectedElection(activeList[0]);
+          } else {
+            setSelectedElection(null);
           }
-        } catch (e) {
-          // Fallback to /elections/active
-          const activeRes = await apiClient.get('/elections/active');
-          if (activeRes.data.success) {
-            electionsList = (activeRes.data.data || []).map(e => ({ ...e, status: 'ACTIVE' }));
-          }
-        }
-
-        setElections(electionsList);
-        if (electionsList.length > 0) {
-          setSelectedElection(electionsList[0]);
         }
       } catch (err) {
         console.error('Failed to fetch elections:', err);
@@ -170,7 +153,7 @@ export default function VoterLogin() {
       );
 
       if (voterStatusRes.data.success && voterStatusRes.data.hasVoted) {
-        setError('⚠️ You have already voted in this election.');
+        setError('You have already cast your ballot in this election.');
         setIsLoading(false);
         
         // ✅ FIX: Clear form after 5 seconds
@@ -305,10 +288,6 @@ export default function VoterLogin() {
         tokenPreview: newAuthToken ? newAuthToken.substring(0, 20) + '...' : 'none'
       });
 
-      // Store session data in state
-      setSessionID(newSessionID);
-      setAuthToken(newAuthToken);
-
       // Store JWT in sessionStorage
       sessionStorage.setItem('authToken', newAuthToken);
       sessionStorage.setItem('sessionID', newSessionID);
@@ -394,13 +373,10 @@ export default function VoterLogin() {
         const expiryTime = Date.now() + expiryMinutes * 60 * 1000;
         setOtpExpiry(expiryTime);
         
-        // ✅ Better notification (no alert popup)
-        console.log('✅ New OTP sent to', res.data.data.maskedEmail);
-        
         // Show toast notification
         const toast = document.createElement('div');
-        toast.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slide-in';
-        toast.textContent = '✅ New OTP sent to your email!';
+        toast.className = 'fixed top-4 right-4 bg-emerald-600 text-white font-medium px-6 py-3 rounded-xl shadow-xl z-50 animate-slide-in flex items-center gap-2';
+        toast.textContent = 'New OTP sent to your registered email';
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
         
@@ -495,33 +471,10 @@ export default function VoterLogin() {
   };
 
   // ============================================
-  // 8. Fetch Results & Verify Vote
+  // 8. Open Results Modal
   // ============================================
   const handleShowResults = () => {
-    if (!selectedElection) {
-      setError('Please select an election first');
-      return;
-    }
-    console.log('🔍 Opening results for election:', selectedElection);
     setShowResults(true);
-  };
-
-  const handleVerifyVote = async (e) => {
-    e.preventDefault();
-    setVerifyError('');
-    setVerifyResult(null);
-    setVerifying(true);
-
-    try {
-      const res = await apiClient.get(`/votes/verify/${verifyTxId}`);
-      if (res.data.success) {
-        setVerifyResult(res.data.data);
-      }
-    } catch (err) {
-      setVerifyError(err.response?.data?.message || 'Vote not found on blockchain');
-    } finally {
-      setVerifying(false);
-    }
   };
 
   // ============================================
@@ -532,24 +485,84 @@ export default function VoterLogin() {
       
       {/* Left Panel - Hero Section */}
       <div className="hidden lg:flex w-1/2 relative overflow-hidden flex-col justify-between p-12 text-white" style={{ backgroundImage: "url('/india-gate.jpg')", backgroundSize: 'cover', backgroundPosition: 'center' }}>
-        <div className="absolute inset-0 bg-black/40"></div>
+        <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"></div>
+
+        {/* Ashoka Chakra Animated Arrival & Colorful Tricolor Aura */}
+        <motion.div
+          initial={{ scale: 0.2, opacity: 0, rotate: -120 }}
+          animate={{ scale: 1, opacity: 0.85, rotate: 0 }}
+          transition={{ duration: 1.8, ease: [0.16, 1, 0.3, 1] }}
+          className="absolute -right-16 -bottom-16 pointer-events-none select-none"
+        >
+          {/* Multi-color ambient glow */}
+          <div className="absolute inset-0 bg-gradient-to-tr from-green-500/20 via-blue-600/20 to-orange-500/30 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s' }} />
+
+          <svg viewBox="0 0 200 200" className="w-[420px] h-[420px] animate-spin" style={{ animationDuration: '100s' }}>
+            <defs>
+              <linearGradient id="chakraGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#FF9933" stopOpacity="0.85" />
+                <stop offset="50%" stopColor="#38bdf8" stopOpacity="0.9" />
+                <stop offset="100%" stopColor="#22c55e" stopOpacity="0.85" />
+              </linearGradient>
+              <radialGradient id="hubGlow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.9" />
+                <stop offset="100%" stopColor="#0038A8" stopOpacity="0.4" />
+              </radialGradient>
+            </defs>
+
+            {/* Outer Rim */}
+            <circle cx="100" cy="100" r="92" fill="none" stroke="url(#chakraGrad)" strokeWidth="3" opacity="0.8" />
+            <circle cx="100" cy="100" r="87" fill="none" stroke="#38bdf8" strokeWidth="1" strokeDasharray="3 3" opacity="0.5" />
+            
+            {/* Center Hub */}
+            <circle cx="100" cy="100" r="22" fill="url(#hubGlow)" stroke="url(#chakraGrad)" strokeWidth="2.5" />
+            <circle cx="100" cy="100" r="7" fill="#ffffff" opacity="0.9" />
+
+            {/* 24 Dharma Spokes */}
+            {[...Array(24)].map((_, i) => (
+              <g key={i} transform={`rotate(${i * 15} 100 100)`}>
+                <line
+                  x1="100"
+                  y1="100"
+                  x2="100"
+                  y2="10"
+                  stroke="url(#chakraGrad)"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  opacity="0.8"
+                />
+                <circle cx="100" cy="12" r="1.5" fill="#38bdf8" opacity="0.9" />
+              </g>
+            ))}
+          </svg>
+        </motion.div>
+
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-8">
-            <Fingerprint className="w-10 h-10" />
+            <Fingerprint className="w-10 h-10 text-white" />
             <h1 className="text-3xl font-bold tracking-tight">SecureVote</h1>
           </div>
-          <h2 className="text-5xl font-extrabold leading-tight mb-6">
+
+          <h2 className="text-6xl xl:text-7xl font-extrabold leading-[1.08] mb-6 tracking-tight">
             <span className="text-[#FF6820]">Your Vote</span>{' '}
             <span className="text-white">is</span>
             <br />
             <span className="text-green-400">Your Voice.</span>
           </h2>
-          <p className="text-orange-100 text-lg max-w-md">
+          <p className="text-orange-100 text-lg sm:text-xl font-normal max-w-lg leading-relaxed">
             Blockchain-enabled secure voting system ensuring transparency, anonymity, and immutability.
           </p>
+
+          {/* Cryptographic Protection Badge */}
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-xs font-semibold text-white mt-8 shadow-inner">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span>FIPS 204 Quantum Shield • Zero Knowledge</span>
+          </div>
         </div>
-        <div className="relative z-10 text-sm text-orange-200">
-          © 2025 Election Commission of India (Blockchain Division)
+
+        <div className="relative z-10 text-xs text-orange-200 flex items-center justify-between">
+          <span>© 2026 Election Commission of India (Blockchain Division)</span>
+          <span className="font-mono text-[10px] bg-white/10 px-2 py-0.5 rounded text-white">v2.1 PQ</span>
         </div>
       </div>
 
@@ -560,14 +573,9 @@ export default function VoterLogin() {
         <div className="p-6 flex justify-end gap-3">
           <button
             onClick={handleShowResults}
-            disabled={!selectedElection}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
           >
-            {isLoadingResults ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <BarChart2 className="w-4 h-4" />
-            )}
+            <BarChart2 className="w-4 h-4 text-blue-600" />
             Live Results
           </button>
           <button
@@ -610,53 +618,30 @@ export default function VoterLogin() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-xl z-20 overflow-hidden"
+                        className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-xl z-20 overflow-hidden max-h-60 overflow-y-auto"
                       >
                         {elections.map(election => (
                           <div 
-                            key={election.id}
+                            key={election.id || election._id}
                             onClick={() => {
                               setSelectedElection(election);
                               setIsDropdownOpen(false);
                             }}
-                            className="px-4 py-3 hover:bg-orange-50 cursor-pointer flex flex-col transition"
+                            className="px-4 py-3 hover:bg-orange-50 cursor-pointer flex flex-col border-b border-gray-50 last:border-0"
                           >
-                            <div className="flex items-center justify-between">
-                              <span className="font-bold text-gray-800">{election.title}</span>
-                              {election.status === 'ENDED' ? (
-                                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-gray-200 text-gray-700">Ended</span>
-                              ) : (
-                                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">Active</span>
-                              )}
-                            </div>
-                            <span className="text-xs text-gray-500">ID: {election.id}</span>
+                            <span className="font-bold text-gray-800">{election.title}</span>
+                            <span className="text-xs text-gray-500">ID: {election.id || election._id}</span>
                           </div>
                         ))}
                         {elections.length === 0 && (
-                          <div className="p-4 text-center text-gray-500 text-sm">No elections available</div>
+                          <div className="p-4 text-center text-gray-500 text-sm">No active elections available for voting</div>
                         )}
                       </motion.div>
                     )}
                   </AnimatePresence>
                 </div>
 
-                {/* Conditional Render: Ended Election Notice vs Active Login Form */}
-                {selectedElection?.status === 'ENDED' ? (
-                  <div className="p-6 bg-orange-50 border border-orange-200 rounded-2xl text-center space-y-4 shadow-sm">
-                    <div className="text-orange-900 font-bold text-lg">Election Concluded</div>
-                    <p className="text-sm text-gray-600 leading-relaxed">
-                      Voting for <strong className="text-gray-900">{selectedElection.title}</strong> is now closed. The final cryptographic tally has been recorded on the Hyperledger Fabric blockchain.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleShowResults}
-                      className="w-full flex items-center justify-center gap-2 bg-orange-600 text-white py-3.5 rounded-xl font-bold shadow-lg shadow-orange-600/30 hover:bg-orange-700 transition active:scale-95"
-                    >
-                      <BarChart2 className="w-5 h-5" />
-                      View Final Verified Results
-                    </button>
-                  </div>
-                ) : (
+                {/* Login Form */}
                 <form onSubmit={handleVerifyIdentity} className="space-y-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Aadhaar Number</label>
@@ -715,7 +700,6 @@ export default function VoterLogin() {
                     )}
                   </button>
                 </form>
-                )}
               </>
             ) : (
               <>
@@ -911,18 +895,7 @@ export default function VoterLogin() {
       {/* Verify Vote Modal */}
       <VerifyModal
         isOpen={showVerifyModal}
-        onClose={() => {
-          setShowVerifyModal(false);
-          setVerifyTxId('');
-          setVerifyResult(null);
-          setVerifyError('');
-        }}
-        verifyTxId={verifyTxId}
-        setVerifyTxId={setVerifyTxId}
-        handleVerifyVote={handleVerifyVote}
-        verifying={verifying}
-        verifyResult={verifyResult}
-        verifyError={verifyError}
+        onClose={() => setShowVerifyModal(false)}
       />
     </div>
   );

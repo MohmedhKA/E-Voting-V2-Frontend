@@ -97,9 +97,8 @@ export async function blindBallot(payload, nHex, eHex) {
   const n = BigInt('0x' + nHex);
   const e = BigInt('0x' + eHex);
   
-  // Everlasting privacy binding: SHA-256("EVOTE-v1:" || electionId || voteID || commitPq)
-  const commitComponent = payload.commitPq || payload.candidateId || '';
-  const message = `EVOTE-v1:${payload.electionId}:${payload.voteID}:${commitComponent}`;
+  // Format MUST match backend: EVOTE-v1:electionId:voteID:commitPq
+  const message = `EVOTE-v1:${payload.electionId}:${payload.voteID}:${payload.commitPq || ''}`;
   const m = await sha256ToBigInt(message);
   
   let r;
@@ -115,11 +114,9 @@ export async function blindBallot(payload, nHex, eHex) {
   const rPowE = modPow(r, e, n);
   const blindedMessage = (m * rPowE) % n;
   
-  // Pad to 512 hex characters (256 bytes) for OpenSSL RSA_NO_PADDING
-  const blindedMessageHex = blindedMessage.toString(16).padStart(512, '0');
-
   return {
-    blindedMessageHex,
+    // Pad to 512 hex characters (256 bytes) for OpenSSL RSA_NO_PADDING
+    blindedMessageHex: blindedMessage.toString(16).padStart(512, '0'),
     r,
     m,
     messageHex: m.toString(16).padStart(64, '0')
@@ -132,7 +129,7 @@ export async function blindBallot(payload, nHex, eHex) {
  * @param {string} blindedSignatureHex The blinded signature received from the EC.
  * @param {BigInt} r The blinding factor used during the blind step.
  * @param {string} nHex The RSA modulus n in hex.
- * @returns {string} The unblinded signature as a hex string.
+ * @returns {string} The unblinded signature as a 512-hex character string.
  */
 export function unblind(blindedSignatureHex, r, nHex) {
   const n = BigInt('0x' + nHex);
@@ -144,5 +141,5 @@ export function unblind(blindedSignatureHex, r, nHex) {
   // signature = (s' * rInverse) mod n
   const signature = (sPrime * rInv) % n;
   
-  return signature.toString(16);
+  return signature.toString(16).padStart(512, '0');
 }

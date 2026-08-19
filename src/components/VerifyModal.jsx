@@ -68,7 +68,7 @@ export default function VerifyModal({ isOpen, onClose }) {
       }
     } catch (err) {
       if (err.response?.status === 410) {
-        setVerifyError('⚠️ Token already used! Each token can only be verified once.');
+        setVerifyError('Token already used. Each one-time verification token can only be verified once.');
       } else if (err.response?.status === 404) {
         setVerifyError('Invalid or expired verification token');
       } else {
@@ -167,21 +167,27 @@ export default function VerifyModal({ isOpen, onClose }) {
                     ? 'bg-blue-50 border-blue-200'
                     : 'bg-orange-50 border-orange-200'
                 }`}>
-                  <p className={`text-xs ${
+                  <div className={`text-xs flex items-start gap-2 ${
                     verificationType === 'receipt' ? 'text-blue-800' : 'text-orange-800'
                   }`}>
                     {verificationType === 'receipt' ? (
                       <>
-                        <strong>📋 Permanent Receipt:</strong> Verify your vote was recorded. 
-                        <span className="font-semibold"> Candidate choice NOT shown</span> (prevents coercion).
+                        <FileText className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-600" />
+                        <div>
+                          <strong className="font-semibold">Permanent Receipt:</strong> Verify your vote was recorded. 
+                          <span className="font-medium"> Candidate choice NOT shown</span> (prevents coercion).
+                        </div>
                       </>
                     ) : (
                       <>
-                        <strong>🎫 One-Time Verification:</strong> Verify your candidate choice. 
-                        <span className="font-semibold"> Valid for 2 minutes, single use only.</span>
+                        <Clock className="w-4 h-4 flex-shrink-0 mt-0.5 text-orange-600" />
+                        <div>
+                          <strong className="font-semibold">One-Time Verification:</strong> Verify your candidate choice. 
+                          <span className="font-medium"> Valid for 2 minutes, single use only.</span>
+                        </div>
                       </>
                     )}
-                  </p>
+                  </div>
                 </div>
 
                 {/* Permanent Receipt Form */}
@@ -195,7 +201,7 @@ export default function VerifyModal({ isOpen, onClose }) {
                         type="text"
                         value={electionId}
                         onChange={(e) => setElectionId(e.target.value)}
-                        placeholder="e.g., secure-election1-2025"
+                        placeholder="e.g., election-2026"
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm text-black transition-all"
                         required
                       />
@@ -330,10 +336,11 @@ export default function VerifyModal({ isOpen, onClose }) {
                       
                       {/* Receipt-Free Notice */}
                       <div className="pt-3 mt-3 border-t border-green-100">
-                        <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
-                          <p className="text-xs text-yellow-800">
-                            ⚠️ <strong>Receipt-Free Design:</strong> Your candidate choice is not shown 
-                            in the permanent receipt to prevent vote buying and coercion.
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
+                          <Shield className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                          <p className="text-xs text-amber-900 leading-relaxed">
+                            <strong className="font-semibold">Receipt-Free Design:</strong> Your candidate choice is cryptographically omitted 
+                            from the permanent ledger receipt to eliminate voter coercion and vote-buying.
                           </p>
                         </div>
                       </div>
@@ -365,10 +372,11 @@ export default function VerifyModal({ isOpen, onClose }) {
                       </div>
                       
                       {/* One-Time Warning */}
-                      <div className="bg-red-50 border border-red-200 rounded p-3">
-                        <p className="text-xs text-red-800">
-                          ⚠️ <strong>This token is now used!</strong> You cannot verify your choice again. 
-                          Use your Vote ID for permanent verification (without candidate info).
+                      <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
+                        <Clock className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-red-800 leading-relaxed">
+                          <strong className="font-semibold">Single-Use Token Expended:</strong> This token is now permanently consumed. 
+                          You may use your Vote ID anytime for permanent verification on the blockchain ledger.
                         </p>
                       </div>
                     </div>

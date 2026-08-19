@@ -128,9 +128,10 @@ export default function VerifyVote() {
                                 </div>
                             </div>
 
-                            <div className="mt-4 p-3 bg-white rounded-lg border border-green-300">
+                            <div className="mt-4 p-3 bg-white rounded-lg border border-green-300 flex items-start gap-2">
+                                <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
                                 <p className="text-xs text-green-800">
-                                    ✅ This vote is permanently recorded on the Hyperledger Fabric blockchain and cannot be altered or deleted.
+                                    This vote is permanently recorded on the Hyperledger Fabric blockchain and cannot be altered or deleted.
                                 </p>
                             </div>
                         </motion.div>

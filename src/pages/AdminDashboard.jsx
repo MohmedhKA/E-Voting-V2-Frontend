@@ -163,7 +163,7 @@ export default function AdminDashboard() {
                     value={electionId}
                     onChange={(e) => setElectionId(e.target.value)}
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-mono text-sm text-gray-700"
-                    placeholder="e.g. election-2025"
+                    placeholder="e.g. election-2026"
                   />
                 </div>
                 <div>

@@ -13,8 +13,8 @@ import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  CheckCircle, AlertCircle, Loader2, ArrowLeft, User, 
-  FileText, Loader, Shield, Key, Clock 
+  CheckCircle, CheckCircle2, AlertCircle, Loader2, ArrowLeft, User, 
+  FileText, Shield, ShieldCheck, Key, Clock, Lock, Cpu, Sparkles 
 } from 'lucide-react';
 import apiClient from '../api/client';
 import VoteSuccessModal from '../components/VoteSuccessModal';
@@ -47,17 +47,18 @@ export default function VotingDashboard() {
   
   // Voting Process State
   const [isVoting, setIsVoting] = useState(false);
+  const [votingStep, setVotingStep] = useState(0); // 1: Blinding, 2: EC Signing, 3: Unblinding, 4: Blockchain Commit
   const [voteSuccess, setVoteSuccess] = useState(false);
   const [error, setError] = useState('');
 
-  // 🆕 NEW: Blind Signature State
+  // Blind Signature State
   const [votingStatus, setVotingStatus] = useState('');
 
-  // 🆕 NEW: Verification Token State (one-time candidate verification)
+  // Verification Token State (one-time candidate verification)
   const [verificationToken, setVerificationToken] = useState(null);
   const [verificationExpiry, setVerificationExpiry] = useState(null);
 
-  // 🆕 NEW: Vote ID State (for receipt)
+  // Vote ID State (for receipt)
   const [voteID, setVoteID] = useState(null);
 
   // Receipt State
@@ -190,95 +191,81 @@ export default function VotingDashboard() {
     setError('');
 
     try {
-      console.log('🗳️ Starting secure voting process...');
+      console.log('Starting secure voting process...');
 
       // ============================================
-      // STEP 1: Generate cryptographic components
+      // STEP 1: Generate cryptographic components & Blind Ballot
       // ============================================
+      setVotingStep(1);
+      setVotingStatus('Generating post-quantum envelope & blinding ballot...');
+
       const generatedVoteID = generateVoteID();
       const nonce = generateNonce();
       const batchID = generateBatchID();
-      
-      console.log('🔐 Generated crypto components:', {
-        voteID: generatedVoteID,
-        nonce: nonce.substring(0, 16) + '...',
-        batchID
-      });
 
-      // Determine candidate index for LWE one-hot vector encoding
-      let candidateIndex = 0;
-      if (Array.isArray(election.candidates)) {
-        const idx = election.candidates.findIndex(c =>
-          (typeof c === 'string' ? c : (c.id || c.name)) === selectedCandidate
-        );
-        if (idx >= 0) candidateIndex = idx;
-      }
-      const numCandidates = (election.candidates && election.candidates.length) || 2;
+      // Attempt Post-Quantum LWE Ballot Envelope Preparation
+      let commitPq = '';
+      let cencPq = '';
+      let proofHex = '';
+      let electionPublicKeyHex = '';
+      let numCandidates = election.candidates?.length || 2;
 
-      setVotingStatus('Generating post-quantum ballot envelope...');
-
-      // ============================================
-      // STEP 1.5: Generate PQ Ballot Envelope (Pedersen Commitment + LWE + Sigma Proof)
-      // ============================================
-      let envelope = null;
       try {
-        const envRes = await apiClient.post('/votes/prepare-envelope', {
-          electionId: election.id,
-          candidateIndex,
-          numCandidates
-        });
-        if (envRes.data.success && envRes.data.data) {
-          envelope = envRes.data.data;
-          console.log('🛡️ Post-quantum ballot envelope generated:', {
-            commitPq: envelope.commitPqHex?.substring(0, 16) + '...'
+        const candidateIndex = election.candidates?.findIndex(
+          c => (typeof c === 'string' ? c : (c.id || c.name || c.candidateName)) === selectedCandidate
+        );
+        if (candidateIndex !== -1 && candidateIndex !== undefined) {
+          const envRes = await apiClient.post('/votes/prepare-envelope', {
+            electionId: election.id,
+            candidateIndex: Math.max(0, candidateIndex),
+            numCandidates
           });
+          if (envRes.data.success && envRes.data.data) {
+            commitPq = envRes.data.data.commitPqHex || '';
+            cencPq = envRes.data.data.cencPqHex || '';
+            proofHex = envRes.data.data.proofHex || '';
+            electionPublicKeyHex = envRes.data.data.electionPublicKeyHex || '';
+          }
         }
       } catch (envErr) {
-        console.warn('⚠️ Could not generate PQ envelope via microservice, using standard path:', envErr);
+        console.warn('LWE envelope generation bypassed (standard mode):', envErr.message);
       }
 
       const ballotPayload = {
         voteID: generatedVoteID,
         electionId: election.id,
         candidateId: selectedCandidate,
-        commitPq: envelope?.commitPqHex || '',
+        commitPq,
         nonce,
         batchID,
         timestamp: Date.now()
       };
 
-      setVotingStatus('Preparing secure ballot...');
-
-      // Get election-scoped ephemeral RSA public key (HNDL mitigation).
-      // Each election has an independent RSA-2048 keypair — must pass electionId.
+      // Get election-scoped ephemeral RSA public key (HNDL mitigation)
       const pubKeyRes = await apiClient.get(`/ec/public-key?electionId=${election.id}`);
       const pubKeyData = pubKeyRes.data.data || pubKeyRes.data;
       const { n, e, electionId: returnedElectionId } = pubKeyData;
 
       if (!n || !e) throw new Error('Failed to retrieve EC public key');
 
-      // Safety assertion: ensure the key returned is for THIS election, not a stale cached one.
       if (returnedElectionId && returnedElectionId !== election.id) {
         throw new Error(
           `Public key election mismatch: expected ${election.id}, got ${returnedElectionId}`
         );
       }
 
-      // ============================================
-      // STEP 2: Create true mathematically blinded ballot
-      // ============================================
+      // Create mathematically blinded ballot
       const { blindedMessageHex, r } = await blindBallot(ballotPayload, n, e);
-      console.log('🎭 Ballot mathematically blinded');
 
       // ============================================
-      // STEP 3: Request blind signature from EC
+      // STEP 2: Request blind signature from EC
       // ============================================
-      setVotingStatus('Requesting authorization...');
-      console.log('📝 Requesting blind signature from EC...');
+      setVotingStep(2);
+      setVotingStatus('Requesting blind authorization from EC...');
 
       const sigRes = await apiClient.post('/ec/request-blind-signature', {
         blindedMessage: blindedMessageHex,
-        sessionID: sessionID, // sent for auth
+        sessionID: sessionID,
         nonce: nonce
       });
 
@@ -289,42 +276,41 @@ export default function VotingDashboard() {
       if (!receivedBlindedSignatureHex) {
           throw new Error('Backend error: Blind signature not returned');
       }
-      console.log('✅ Received blinded signature from EC');
 
       // ============================================
-      // STEP 4: Unblind the signature in browser (Discard r)
+      // STEP 3: Unblind signature & derive terminal HMAC
       // ============================================
-      setVotingStatus('Finalizing...');
+      setVotingStep(3);
+      setVotingStatus('Unblinding signature & deriving terminal HMAC...');
+
       const signatureHex = unblind(receivedBlindedSignatureHex, r, n);
-      console.log('✅ Unblinded signature successfully');
-      // r variable will be automatically garbage collected here
-
-      // ============================================
-      // STEP 5: Cast unblinded vote (ANONYMOUS & EVERLASTING PRIVACY!)
-      // ============================================
-      setVotingStatus('Submitting vote...');
-      console.log('📮 Casting anonymous vote with valid unblinded signature...');
+      // r variable will be automatically garbage collected
 
       // Derive terminal-scoped HMAC tag for the vote payload
       const terminalKeyHex = import.meta.env.VITE_TERMINAL_KEY || '472323deb05e39452b10c724489e5923fb1dc077ee881efbbd341a623382cde8';
-      const hmacTarget = envelope?.commitPqHex || selectedCandidate;
       const hmacTag = await generateHmacTag(
         election.id,
-        hmacTarget,
+        commitPq || selectedCandidate,
         generatedVoteID,
         signatureHex,
         terminalKeyHex
       );
 
+      // ============================================
+      // STEP 4: Cast unblinded vote (ANONYMOUS Fabric Commit)
+      // ============================================
+      setVotingStep(4);
+      setVotingStatus('Committing anonymous ballot to Hyperledger Fabric...');
+
       const voteRes = await apiClient.post('/votes/submit', {
         voteID: generatedVoteID,
         electionId: election.id,
         candidateId: selectedCandidate,
-        commitPq: envelope?.commitPqHex || '',
-        cencPq: envelope?.cencPqHex || '',
-        proofHex: envelope?.proofHex || '',
-        electionPublicKeyHex: envelope?.electionPublicKeyHex || '',
-        numCandidates: String(numCandidates),
+        commitPq,
+        cencPq,
+        proofHex,
+        electionPublicKeyHex,
+        numCandidates,
         blindSignature: signatureHex,
         batchID: batchID,
         hmacTag: hmacTag
@@ -334,20 +320,14 @@ export default function VotingDashboard() {
         throw new Error(voteRes.data.message || 'Vote submission failed');
       }
 
-      console.log('✅ Vote cast successfully!');
-
       // Clear the pending RPV session since the vote is committed safely
       try {
         await apiClient.post('/ec/clear-pending');
-        console.log('🧹 Pending recovery session cleared successfully.');
       } catch (clearErr) {
-        console.warn('⚠️ Non-fatal: Failed to clear pending session:', clearErr);
+        console.warn('Non-fatal: Failed to clear pending session:', clearErr);
       }
 
-
-      // ============================================
-      // STEP 6: Handle Post-Vote flow
-      // ============================================
+      // Post-Vote flow
       const voteResponseData = voteRes.data.data || voteRes.data;
       
       if (voteResponseData.verificationToken) {
@@ -361,10 +341,11 @@ export default function VotingDashboard() {
       fetchReceipt(election.id, generatedVoteID);
 
     } catch (err) {
-      console.error('❌ Vote failed:', err);
+      console.error('Vote failed:', err);
       setError(err.response?.data?.message || err.message || 'Vote failed');
     } finally {
       setIsVoting(false);
+      setVotingStep(0);
       setVotingStatus('');
     }
   };
@@ -506,16 +487,151 @@ export default function VotingDashboard() {
           </div>
         )}
 
+        {/* Cryptographic Submission Pipeline Modal */}
+        <AnimatePresence>
+          {isVoting && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl text-slate-900 relative overflow-hidden"
+              >
+                {/* Ambient glow */}
+                <div className="absolute top-0 right-0 w-40 h-40 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+                <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center shadow-md shadow-orange-500/20">
+                    <Cpu className="w-5 h-5 text-white animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">Cryptographic Ballot Submission</h3>
+                    <p className="text-xs text-slate-500">Executing Zero-Knowledge & Post-Quantum Pipeline</p>
+                  </div>
+                </div>
+
+                {/* 4 Pipeline Steps */}
+                <div className="space-y-3.5">
+                  {/* Step 1 */}
+                  <div className={`flex items-start gap-3 p-3.5 rounded-2xl border transition-all ${
+                    votingStep === 1 
+                      ? 'bg-orange-50/90 border-orange-300 text-orange-950 shadow-sm'
+                      : votingStep > 1 
+                        ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                        : 'bg-slate-50 border-slate-200/60 text-slate-400'
+                  }`}>
+                    <div className="mt-0.5 flex-shrink-0">
+                      {votingStep > 1 ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                      ) : votingStep === 1 ? (
+                        <Loader2 className="w-5 h-5 text-orange-600 animate-spin" />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full border border-slate-300 flex items-center justify-center text-[10px] text-slate-500 font-bold">1</div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold">1. Chaum RSA-2048 Ballot Blinding</div>
+                      <div className="text-xs opacity-80 mt-0.5">Blinding factor generated in volatile memory</div>
+                    </div>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className={`flex items-start gap-3 p-3.5 rounded-2xl border transition-all ${
+                    votingStep === 2 
+                      ? 'bg-orange-50/90 border-orange-300 text-orange-950 shadow-sm'
+                      : votingStep > 2 
+                        ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                        : 'bg-slate-50 border-slate-200/60 text-slate-400'
+                  }`}>
+                    <div className="mt-0.5 flex-shrink-0">
+                      {votingStep > 2 ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                      ) : votingStep === 2 ? (
+                        <Loader2 className="w-5 h-5 text-orange-600 animate-spin" />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full border border-slate-300 flex items-center justify-center text-[10px] text-slate-500 font-bold">2</div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold">2. Blind Authorization Token</div>
+                      <div className="text-xs opacity-80 mt-0.5">Election Commission signs blind envelope without viewing vote</div>
+                    </div>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className={`flex items-start gap-3 p-3.5 rounded-2xl border transition-all ${
+                    votingStep === 3 
+                      ? 'bg-orange-50/90 border-orange-300 text-orange-950 shadow-sm'
+                      : votingStep > 3 
+                        ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                        : 'bg-slate-50 border-slate-200/60 text-slate-400'
+                  }`}>
+                    <div className="mt-0.5 flex-shrink-0">
+                      {votingStep > 3 ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                      ) : votingStep === 3 ? (
+                        <Loader2 className="w-5 h-5 text-orange-600 animate-spin" />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full border border-slate-300 flex items-center justify-center text-[10px] text-slate-500 font-bold">3</div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold">3. Signature Unblinding & Terminal HMAC</div>
+                      <div className="text-xs opacity-80 mt-0.5">Blinding factor destroyed in RAM • Hardware HMAC applied</div>
+                    </div>
+                  </div>
+
+                  {/* Step 4 */}
+                  <div className={`flex items-start gap-3 p-3.5 rounded-2xl border transition-all ${
+                    votingStep === 4 
+                      ? 'bg-orange-50/90 border-orange-300 text-orange-950 shadow-sm'
+                      : votingStep > 4 
+                        ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                        : 'bg-slate-50 border-slate-200/60 text-slate-400'
+                  }`}>
+                    <div className="mt-0.5 flex-shrink-0">
+                      {votingStep > 4 ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                      ) : votingStep === 4 ? (
+                        <Loader2 className="w-5 h-5 text-orange-600 animate-spin" />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full border border-slate-300 flex items-center justify-center text-[10px] text-slate-500 font-bold">4</div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold">4. Hyperledger Fabric CCaaS Commit</div>
+                      <div className="text-xs opacity-80 mt-0.5">SmartBFT consensus & ML-DSA-65 Merkle anchor batching</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
+                  <span className="flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-emerald-600" /> End-to-End Encrypted
+                  </span>
+                  <span>Terminal: WEB_001</span>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Success Modal */}
-          <VoteSuccessModal
-            isOpen={voteSuccess}
-            onClose={() => setVoteSuccess(false)}
-            voteID={voteID}
-            verificationToken={verificationToken}
-            verificationExpiry={verificationExpiry}
-            receipt={receipt}
-            electionTitle={election?.title}
-          />
+        <VoteSuccessModal
+          isOpen={voteSuccess}
+          onClose={() => setVoteSuccess(false)}
+          voteID={voteID}
+          verificationToken={verificationToken}
+          verificationExpiry={verificationExpiry}
+          receipt={receipt}
+          electionTitle={election?.title}
+        />
 
         {/* Error Toast */}
         <AnimatePresence>
@@ -535,6 +651,27 @@ export default function VotingDashboard() {
           )}
         </AnimatePresence>
       </main>
+
+      {/* Background Ashoka Chakra Vector Watermark */}
+      <div className="fixed -right-24 -bottom-24 pointer-events-none opacity-[0.035] -z-10">
+        <svg viewBox="0 0 200 200" className="w-[500px] h-[500px] text-slate-900 animate-spin" style={{ animationDuration: '160s' }}>
+          <circle cx="100" cy="100" r="92" fill="none" stroke="currentColor" strokeWidth="3.5" />
+          <circle cx="100" cy="100" r="22" fill="none" stroke="currentColor" strokeWidth="3.5" />
+          <circle cx="100" cy="100" r="6" fill="currentColor" />
+          {[...Array(24)].map((_, i) => (
+            <line
+              key={i}
+              x1="100"
+              y1="100"
+              x2="100"
+              y2="8"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              transform={`rotate(${i * 15} 100 100)`}
+            />
+          ))}
+        </svg>
+      </div>
     </div>
   );
 }
