@@ -13,8 +13,8 @@ import axios from 'axios';
 // Get API keys from environment variables (best practice)
 // Fallback to hardcoded keys ONLY for local development
 const VOTER_API_KEY = import.meta.env.VITE_VOTER_API_KEY || 'voter-secret-key-456';
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000/api/v1';
-const TERMINAL_ID = import.meta.env.VITE_TERMINAL_ID || 'WEB_TERMINAL_001';
+const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:3000/api/v1';
+export const TERMINAL_ID = import.meta.env.VITE_TERMINAL_ID || 'TERM-WEB-001';
 
 // Create axios instance with default configuration
 const apiClient = axios.create({

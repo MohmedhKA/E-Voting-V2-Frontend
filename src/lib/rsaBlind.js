@@ -75,13 +75,20 @@ function getRandomBigInt(bytesLength) {
 }
 
 /**
- * Hashes a string using SHA-256 and returns a BigInt.
+ * Hashes a string using SHA-256 and returns a hex string.
  */
-async function sha256ToBigInt(data) {
+async function sha256Hex(data) {
   const buffer = new TextEncoder().encode(data);
   const hashBuffer = await window.crypto.subtle.digest('SHA-256', buffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Hashes a string using SHA-256 and returns a BigInt.
+ */
+async function sha256ToBigInt(data) {
+  const hex = await sha256Hex(data);
   return BigInt('0x' + hex);
 }
 
@@ -97,8 +104,10 @@ export async function blindBallot(payload, nHex, eHex) {
   const n = BigInt('0x' + nHex);
   const e = BigInt('0x' + eHex);
   
-  // Format MUST match backend: EVOTE-v1:electionId:voteID:commitPq
-  const message = `EVOTE-v1:${payload.electionId}:${payload.voteID}:${payload.commitPq || ''}`;
+  // Format MUST match backend V2: EVOTE-v2:electionId:voteID:cencBinding
+  // where cencBinding is SHA-256 hex digest of cencPq ciphertext
+  const cencBinding = await sha256Hex(payload.cencPq || '');
+  const message = `EVOTE-v2:${payload.electionId}:${payload.voteID}:${cencBinding}`;
   const m = await sha256ToBigInt(message);
   
   let r;

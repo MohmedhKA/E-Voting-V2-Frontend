@@ -16,10 +16,16 @@ import {
   CheckCircle, CheckCircle2, AlertCircle, Loader2, ArrowLeft, User, 
   FileText, Shield, ShieldCheck, Key, Clock, Lock, Cpu, Sparkles 
 } from 'lucide-react';
-import apiClient from '../api/client';
+import apiClient, { TERMINAL_ID } from '../api/client';
 import VoteSuccessModal from '../components/VoteSuccessModal';
 import { generateVoteID, generateNonce, generateBatchID, generateHmacTag } from '../lib/crypto';
 import { blindBallot, unblind } from '../lib/rsaBlind';
+
+// Terminal-scoped HMAC key mapping (derived from backend HMAC_MASTER_SECRET)
+const TERMINAL_KEYS = {
+  'TERM-WEB-001': '4b139b025975ab194f084ad55c3a44c5d8a9de796a8562ba35cc6e10dd1f8692',
+  'WEB_TERMINAL_001': '472323deb05e39452b10c724489e5923fb1dc077ee881efbbd341a623382cde8'
+};
 
 
 // Helper to get random color for candidates based on index
@@ -236,6 +242,7 @@ export default function VotingDashboard() {
         electionId: election.id,
         candidateId: selectedCandidate,
         commitPq,
+        cencPq,
         nonce,
         batchID,
         timestamp: Date.now()
@@ -287,7 +294,8 @@ export default function VotingDashboard() {
       // r variable will be automatically garbage collected
 
       // Derive terminal-scoped HMAC tag for the vote payload
-      const terminalKeyHex = import.meta.env.VITE_TERMINAL_KEY || '472323deb05e39452b10c724489e5923fb1dc077ee881efbbd341a623382cde8';
+      const activeTerminalId = apiClient.defaults?.headers?.['x-terminal-id'] || TERMINAL_ID || 'TERM-WEB-001';
+      const terminalKeyHex = import.meta.env.VITE_TERMINAL_KEY || TERMINAL_KEYS[activeTerminalId] || TERMINAL_KEYS['TERM-WEB-001'];
       const hmacTag = await generateHmacTag(
         election.id,
         commitPq || selectedCandidate,
